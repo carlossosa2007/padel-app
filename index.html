@@ -1,0 +1,884 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Padel App</title>
+<style>
+  :root {
+    --verde: #1b8a5a;
+    --verde-claro: #d6f5e3;
+    --naranja: #ff7a00;
+    --gris: #555;
+    --fondo: #f4f6f5;
+  }
+  * { box-sizing: border-box; font-family: Arial, sans-serif; }
+  body {
+    margin: 0;
+    background: var(--fondo);
+    display: flex;
+    justify-content: center;
+  }
+  .app {
+    width: 100%;
+    max-width: 420px;
+    min-height: 100vh;
+    background: white;
+    box-shadow: 0 0 12px rgba(0,0,0,0.08);
+    display: flex;
+    flex-direction: column;
+  }
+  header {
+    background: var(--verde);
+    color: white;
+    padding: 18px 16px;
+    text-align: center;
+    font-size: 22px;
+    font-weight: bold;
+  }
+  .screen {
+    display: none;
+    padding: 20px;
+    flex: 1;
+    flex-direction: column;
+    gap: 14px;
+  }
+  .screen.active { display: flex; }
+
+  button {
+    padding: 14px;
+    border: none;
+    border-radius: 10px;
+    font-size: 16px;
+    cursor: pointer;
+    font-weight: bold;
+  }
+  .btn-primary {
+    background: var(--verde);
+    color: white;
+  }
+  .btn-secondary {
+    background: var(--verde-claro);
+    color: var(--verde);
+  }
+  .btn-volver {
+    background: none;
+    color: var(--gris);
+    text-align: left;
+    font-weight: normal;
+    padding: 4px 0;
+  }
+  input, select {
+    padding: 12px;
+    border: 1px solid #ccc;
+    border-radius: 8px;
+    font-size: 15px;
+  }
+  label {
+    font-size: 14px;
+    color: var(--gris);
+    margin-bottom: -8px;
+  }
+  .stepper {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+  .stepper button {
+    width: 40px;
+    height: 40px;
+    background: var(--verde-claro);
+    color: var(--verde);
+    font-size: 20px;
+    border-radius: 8px;
+  }
+  .stepper span {
+    font-size: 18px;
+    min-width: 24px;
+    text-align: center;
+  }
+  .chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+  .chip {
+    padding: 8px 14px;
+    border-radius: 20px;
+    border: 1px solid var(--verde);
+    background: white;
+    color: var(--verde);
+    font-size: 14px;
+    cursor: pointer;
+    font-weight: normal;
+  }
+  .chip.selected {
+    background: var(--verde);
+    color: white;
+  }
+</style>
+</head>
+<body>
+<div class="app">
+  <header>🎾 Padel App</header>
+
+  <!-- PANTALLA INICIO -->
+  <div class="screen active" id="screen-inicio">
+    <button class="btn-primary" onclick="goTo('screen-crear')">Crear torneo</button>
+    <button class="btn-secondary" onclick="abrirUnirse()">Unirse a torneo</button>
+    <button class="btn-secondary" onclick="abrirMisTorneos()">Mis torneos</button>
+    <button class="btn-secondary" onclick="alert('Próximamente: ver estadísticas')">Ver estadísticas</button>
+    <button class="btn-secondary" onclick="abrirPerfil()">Mi Perfil</button>
+  </div>
+
+  <!-- PANTALLA CREAR TORNEO -->
+  <div class="screen" id="screen-crear">
+    <button class="btn-volver" onclick="goTo('screen-inicio')">&larr; Volver</button>
+
+    <label>Nombre del torneo</label>
+    <input type="text" id="nombreTorneo" placeholder="Ej: Padel de los viernes">
+
+    <label>Frecuencia de juego (veces por semana)</label>
+    <div class="stepper">
+      <button onclick="cambiarValor('frecuencia', -1)">-</button>
+      <span id="frecuencia">1</span>
+      <button onclick="cambiarValor('frecuencia', 1)">+</button>
+    </div>
+
+    <label>Días de juego</label>
+    <div class="chips" id="diasJuego">
+      <div class="chip" onclick="toggleChip(this)">Lunes</div>
+      <div class="chip" onclick="toggleChip(this)">Martes</div>
+      <div class="chip" onclick="toggleChip(this)">Miércoles</div>
+      <div class="chip" onclick="toggleChip(this)">Jueves</div>
+      <div class="chip" onclick="toggleChip(this)">Viernes</div>
+      <div class="chip" onclick="toggleChip(this)">Sábado</div>
+      <div class="chip" onclick="toggleChip(this)">Domingo</div>
+    </div>
+
+    <button class="btn-primary" onclick="crearTorneo()">Crear torneo</button>
+  </div>
+
+  <!-- PANTALLA MIS TORNEOS: lista -->
+  <div class="screen" id="screen-mistorneos">
+    <button class="btn-volver" onclick="goTo('screen-inicio')">&larr; Volver</button>
+    <h3>Mis Torneos</h3>
+    <div id="listaMisTorneos" style="display:flex; flex-direction:column; gap:10px;"></div>
+  </div>
+
+  <!-- PANTALLA DETALLE DE TORNEO -->
+  <div class="screen" id="screen-detalle-torneo">
+    <button class="btn-volver" onclick="goTo('screen-mistorneos')">&larr; Volver</button>
+    <h3 id="tituloDetalleTorneo"></h3>
+
+    <label>Asistencia de hoy</label>
+    <div id="listaConfirmados" style="display:flex; flex-direction:column; gap:6px;"></div>
+
+    <button class="btn-primary" id="btnConfirmarAsistencia" onclick="confirmarAsistencia()">Confirmar asistencia</button>
+
+    <button class="btn-secondary" onclick="irAJornada()">Continuar a sorteo de hoy</button>
+  </div>
+
+  <!-- PANTALLA JORNADA: bolsa de jugadores -->
+  <div class="screen" id="screen-jornada">
+    <button class="btn-volver" onclick="goTo('screen-detalle-torneo')">&larr; Volver</button>
+
+    <label>Cantidad de pistas hoy</label>
+    <div class="stepper">
+      <button onclick="cambiarValor('pistasHoy', -1)">-</button>
+      <span id="pistasHoy">1</span>
+      <button onclick="cambiarValor('pistasHoy', 1)">+</button>
+    </div>
+
+    <label>Formato de set para hoy</label>
+    <select id="formatoSetHoy">
+      <option value="4">Sets a 4 games</option>
+      <option value="6">Sets a 6 games</option>
+    </select>
+
+    <h3>Jugadores confirmados para hoy</h3>
+    <p style="color:var(--gris); margin-top:-10px;">Tocá para marcar quién juega esta fecha</p>
+
+    <div id="listaJornada" class="chips"></div>
+
+    <button class="btn-primary" onclick="irASorteo()">Sortear parejas</button>
+  </div>
+
+  <!-- PANTALLA SORTEO -->
+  <div class="screen" id="screen-sorteo">
+    <button class="btn-volver" onclick="goTo('screen-jornada')">&larr; Volver</button>
+    <h3>Opciones de sorteo</h3>
+
+    <label>Lado de la pista</label>
+    <div class="chips" id="opcionLado">
+      <div class="chip selected" data-valor="respetar" onclick="seleccionarUnico(this)">Respetar lado preferido</div>
+      <div class="chip" data-valor="libre" onclick="seleccionarUnico(this)">No respetar lado</div>
+    </div>
+
+    <label>Nivel de jugadores</label>
+    <div class="chips" id="opcionNivel">
+      <div class="chip selected" data-valor="balancear" onclick="seleccionarUnico(this)">Balancear por categoría</div>
+      <div class="chip" data-valor="libre" onclick="seleccionarUnico(this)">Sin balancear</div>
+    </div>
+
+    <button class="btn-primary" onclick="sortearParejas()">Generar cruces</button>
+
+    <div id="resultadoSorteo"></div>
+  </div>
+
+  <!-- PANTALLA UNIRSE A TORNEO -->
+  <div class="screen" id="screen-unirse">
+    <button class="btn-volver" onclick="goTo('screen-inicio')">&larr; Volver</button>
+    <h3>Unirse a torneo</h3>
+
+    <label>Código del torneo (4 letras)</label>
+    <input type="text" id="codigoUnirse" maxlength="4" style="text-transform:uppercase; letter-spacing:4px; font-size:20px;" placeholder="ABCD">
+
+    <button class="btn-primary" onclick="buscarTorneo()">Buscar torneo</button>
+  </div>
+
+  <!-- PANTALLA CONFIRMAR INGRESO -->
+  <div class="screen" id="screen-confirmar-ingreso">
+    <button class="btn-volver" onclick="goTo('screen-unirse')">&larr; Volver</button>
+    <h3 id="tituloTorneoUnirse"></h3>
+    <p>¿Confirmás que te unís a este torneo con tu perfil?</p>
+    <div id="resumenPerfilUnirse" style="background:var(--verde-claro); padding:12px; border-radius:8px;"></div>
+    <button class="btn-primary" onclick="confirmarIngreso()">Confirmar, soy yo</button>
+  </div>
+
+  <!-- PANTALLA MI PERFIL -->
+  <div class="screen" id="screen-perfil">
+    <button class="btn-volver" onclick="goTo('screen-inicio')">&larr; Volver</button>
+    <h3>Mi Perfil</h3>
+
+    <label>Nombre</label>
+    <input type="text" id="perfilNombre" placeholder="Tu nombre">
+
+    <label>PIN (4 dígitos)</label>
+    <input type="password" id="perfilPin" maxlength="4" inputmode="numeric" placeholder="••••">
+
+    <label>Brazo hábil</label>
+    <div class="chips" id="perfilBrazo">
+      <div class="chip" data-valor="Diestro" onclick="seleccionarUnico(this)">Diestro</div>
+      <div class="chip" data-valor="Zurdo" onclick="seleccionarUnico(this)">Zurdo</div>
+    </div>
+
+    <label>Lado preferido de la pista</label>
+    <div class="chips" id="perfilLado">
+      <div class="chip" data-valor="Drive" onclick="seleccionarUnico(this)">Drive</div>
+      <div class="chip" data-valor="Revés" onclick="seleccionarUnico(this)">Revés</div>
+      <div class="chip" data-valor="Ambos" onclick="seleccionarUnico(this)">Ambos</div>
+    </div>
+
+    <label>Categoría</label>
+    <div class="chips" id="perfilCategoria">
+      <div class="chip" data-valor="1ra" onclick="seleccionarUnico(this)">1ra</div>
+      <div class="chip" data-valor="2da" onclick="seleccionarUnico(this)">2da</div>
+      <div class="chip" data-valor="3ra" onclick="seleccionarUnico(this)">3ra</div>
+      <div class="chip" data-valor="4ta" onclick="seleccionarUnico(this)">4ta</div>
+      <div class="chip" data-valor="5ta" onclick="seleccionarUnico(this)">5ta</div>
+      <div class="chip" data-valor="6ta" onclick="seleccionarUnico(this)">6ta</div>
+      <div class="chip" data-valor="7ma" onclick="seleccionarUnico(this)">7ma</div>
+      <div class="chip" data-valor="8va" onclick="seleccionarUnico(this)">8va</div>
+    </div>
+
+    <button class="btn-primary" id="btnGuardarPerfil" onclick="guardarPerfil()">Guardar</button>
+    <button class="btn-secondary" id="btnEditarPerfil" onclick="habilitarEdicion()" style="display:none;">Editar</button>
+  </div>
+
+</div>
+
+<script type="module">
+  import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
+  import {
+    getFirestore, doc, getDoc, setDoc, collection, getDocs, query, where, arrayUnion
+  } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+
+  const firebaseConfig = {
+    apiKey: "AIzaSyCUGgUYtx3F_KH0jqfeMjL5b7fep0WvDcg",
+    authDomain: "padelapp-up.firebaseapp.com",
+    projectId: "padelapp-up",
+    storageBucket: "padelapp-up.firebasestorage.app",
+    messagingSenderId: "246911177769",
+    appId: "1:246911177769:web:7c9aafa7d5478a8774b838"
+  };
+
+  const app = initializeApp(firebaseConfig);
+  const db = getFirestore(app);
+
+  let valores = { frecuencia: 1, pistasHoy: 1 };
+
+  function goTo(id) {
+    document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+    document.getElementById(id).classList.add('active');
+  }
+
+  function cambiarValor(campo, delta) {
+    let nuevo = valores[campo] + delta;
+    if (nuevo < 1) nuevo = 1;
+    if (nuevo > 7) nuevo = 7;
+    valores[campo] = nuevo;
+    document.getElementById(campo).textContent = nuevo;
+  }
+
+  function toggleChip(el) {
+    el.classList.toggle('selected');
+  }
+
+  function generarCodigo() {
+    const letras = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
+    let codigo = '';
+    for (let i = 0; i < 4; i++) {
+      codigo += letras[Math.floor(Math.random() * letras.length)];
+    }
+    return codigo;
+  }
+
+  async function crearTorneo() {
+    const nombre = document.getElementById('nombreTorneo').value.trim();
+    if (!nombre) {
+      alert('Por favor, escribí un nombre para el torneo.');
+      return;
+    }
+
+    const diasSeleccionados = [...document.querySelectorAll('#diasJuego .chip.selected')]
+      .map(c => c.textContent);
+
+    const miNombre = localStorage.getItem('miNombre');
+    if (!miNombre) {
+      alert('Primero completá tu perfil en "Mi Perfil".');
+      return;
+    }
+
+    const codigo = generarCodigo();
+    const torneo = {
+      nombre: nombre,
+      frecuencia: valores.frecuencia,
+      dias: diasSeleccionados,
+      codigo: codigo,
+      jugadores: [miNombre]
+    };
+
+    await setDoc(doc(db, 'torneos', codigo), torneo);
+
+    document.getElementById('tituloTorneoCreado').textContent = 'Torneo: ' + torneo.nombre;
+    document.getElementById('codigoTorneo').textContent = torneo.codigo;
+
+    goTo('screen-compartir');
+  }
+
+  function compartirTorneo() {
+    const nombre = document.getElementById('tituloTorneoCreado').textContent.replace('Torneo: ', '');
+    const codigo = document.getElementById('codigoTorneo').textContent;
+    const texto = `🎾 ¡Te invito al torneo "${nombre}"!\nUnite con el código: ${codigo}`;
+    const url = `https://wa.me/?text=${encodeURIComponent(texto)}`;
+    window.open(url, '_blank');
+  }
+
+  // ---- MIS TORNEOS ----
+
+  function fechaHoy() {
+    return new Date().toISOString().slice(0, 10); // YYYY-MM-DD
+  }
+
+  async function abrirMisTorneos() {
+    const miNombre = localStorage.getItem('miNombre');
+    if (!miNombre) {
+      alert('Primero completá tu perfil en "Mi Perfil".');
+      return;
+    }
+
+    const cont = document.getElementById('listaMisTorneos');
+    cont.innerHTML = 'Cargando...';
+
+    const snap = await getDocs(
+      query(collection(db, 'torneos'), where('jugadores', 'array-contains', miNombre))
+    );
+
+    if (snap.empty) {
+      cont.innerHTML = '<p style="color:var(--gris);">Todavía no estás en ningún torneo. Creá uno o unite con un código.</p>';
+    } else {
+      cont.innerHTML = '';
+      snap.forEach(d => {
+        const torneo = d.data();
+        const btn = document.createElement('button');
+        btn.className = 'btn-secondary';
+        btn.textContent = torneo.nombre + ' (código ' + torneo.codigo + ')';
+        btn.onclick = () => abrirDetalleTorneo(torneo.codigo);
+        cont.appendChild(btn);
+      });
+    }
+
+    goTo('screen-mistorneos');
+  }
+
+  // ---- DETALLE DE TORNEO / ASISTENCIA ----
+
+  async function abrirDetalleTorneo(codigo) {
+    localStorage.setItem('torneoSeleccionado', codigo);
+
+    const torneoSnap = await getDoc(doc(db, 'torneos', codigo));
+    const torneo = torneoSnap.data();
+    document.getElementById('tituloDetalleTorneo').textContent = 'Torneo: ' + torneo.nombre;
+
+    await renderConfirmados(codigo);
+    goTo('screen-detalle-torneo');
+  }
+
+  async function renderConfirmados(codigo) {
+    const fecha = fechaHoy();
+    const asistSnap = await getDoc(doc(db, 'torneos', codigo, 'asistencias', fecha));
+    const confirmados = asistSnap.exists() ? asistSnap.data().confirmados : [];
+
+    const cont = document.getElementById('listaConfirmados');
+    if (confirmados.length === 0) {
+      cont.innerHTML = '<p style="color:var(--gris);">Aún no hay jugadores confirmados</p>';
+    } else {
+      cont.innerHTML = confirmados.map(n =>
+        `<div class="chip selected" style="cursor:default;">${n}</div>`
+      ).join('');
+    }
+
+    const miNombre = localStorage.getItem('miNombre');
+    const btn = document.getElementById('btnConfirmarAsistencia');
+    if (confirmados.includes(miNombre)) {
+      btn.textContent = 'Ya confirmaste tu asistencia ✓';
+      btn.disabled = true;
+    } else {
+      btn.textContent = 'Confirmar asistencia';
+      btn.disabled = false;
+    }
+  }
+
+  async function confirmarAsistencia() {
+    const codigo = localStorage.getItem('torneoSeleccionado');
+    const miNombre = localStorage.getItem('miNombre');
+    const fecha = fechaHoy();
+    const ref = doc(db, 'torneos', codigo, 'asistencias', fecha);
+
+    const snap = await getDoc(ref);
+    if (!snap.exists()) {
+      await setDoc(ref, { confirmados: [miNombre] });
+    } else {
+      await setDoc(ref, { confirmados: arrayUnion(miNombre) }, { merge: true });
+    }
+
+    await renderConfirmados(codigo);
+  }
+
+  // ---- JORNADA: bolsa de jugadores ----
+
+  async function irAJornada() {
+    const codigo = localStorage.getItem('torneoSeleccionado');
+    const fecha = fechaHoy();
+
+    const asistSnap = await getDoc(doc(db, 'torneos', codigo, 'asistencias', fecha));
+    const confirmados = asistSnap.exists() ? asistSnap.data().confirmados : [];
+
+    const lista = document.getElementById('listaJornada');
+    lista.innerHTML = '';
+
+    valores.pistasHoy = 1;
+    document.getElementById('pistasHoy').textContent = '1';
+    document.getElementById('formatoSetHoy').value = '4';
+
+    for (const nombre of confirmados) {
+      const perfilSnap = await getDoc(doc(db, 'jugadores', nombre));
+      const j = perfilSnap.data();
+      const div = document.createElement('div');
+      div.className = 'chip selected'; // por defecto todos confirmados
+      div.dataset.nombre = j.nombre;
+      div.dataset.lado = j.lado;
+      div.dataset.categoria = j.categoria;
+      div.textContent = j.nombre;
+      div.onclick = () => div.classList.toggle('selected');
+      lista.appendChild(div);
+    }
+
+    goTo('screen-jornada');
+  }
+
+  // ---- SORTEO DE PAREJAS ----
+
+  const categoriaValor = {
+    '1ra':1, '2da':2, '3ra':3, '4ta':4, '5ta':5, '6ta':6, '7ma':7, '8va':8
+  };
+
+  function irASorteo() {
+    document.getElementById('resultadoSorteo').innerHTML = '';
+    goTo('screen-sorteo');
+  }
+
+  function armarParejasPorLado(jugadores, balancear) {
+    // Separar por preferencia
+    let drive = jugadores.filter(j => j.lado === 'Drive');
+    let reves = jugadores.filter(j => j.lado === 'Revés');
+    let ambos = jugadores.filter(j => j.lado === 'Ambos');
+
+    // Repartir "Ambos" para equilibrar ambos grupos
+    ambos = mezclarArray(ambos);
+    ambos.forEach(j => {
+      if (drive.length <= reves.length) drive.push(j);
+      else reves.push(j);
+    });
+
+    // Emparejar drive con reves mientras haya de ambos
+    let parejas = [];
+    while (drive.length > 0 && reves.length > 0) {
+      let a, b;
+      if (balancear) {
+        const todos = [...drive, ...reves].sort((x,y) => categoriaValor[x.categoria]-categoriaValor[y.categoria]);
+        a = todos[0];
+        b = todos[todos.length-1];
+        drive = drive.filter(j => j !== a && j !== b);
+        reves = reves.filter(j => j !== a && j !== b);
+        // Si ambos quedaron en el mismo grupo original, igual forman pareja (cruzan lados)
+      } else {
+        a = drive.shift();
+        b = reves.shift();
+      }
+      parejas.push([a, b]);
+    }
+
+    // Excedente: queda solo en un grupo (mismo lado entre sí)
+    let excedente = drive.length > 0 ? drive : reves;
+    if (balancear) {
+      excedente.sort((x,y) => categoriaValor[x.categoria]-categoriaValor[y.categoria]);
+      let izq = 0, der = excedente.length - 1;
+      while (izq < der) {
+        parejas.push([excedente[izq], excedente[der]]);
+        izq++; der--;
+      }
+    } else {
+      excedente = mezclarArray(excedente);
+      for (let i = 0; i < excedente.length; i += 2) {
+        if (excedente[i+1]) parejas.push([excedente[i], excedente[i+1]]);
+      }
+    }
+
+    return parejas;
+  }
+
+  function mezclarArray(arr) {
+    const copia = [...arr];
+    for (let i = copia.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [copia[i], copia[j]] = [copia[j], copia[i]];
+    }
+    return copia;
+  }
+
+  function sortearParejas() {
+    const seleccionados = [...document.querySelectorAll('#listaJornada .chip.selected')];
+
+    let jugadores = seleccionados.map(c => ({
+      nombre: c.dataset.nombre,
+      lado: c.dataset.lado,
+      categoria: c.dataset.categoria
+    }));
+
+    if (jugadores.length < 4) {
+      alert('Se necesitan al menos 4 jugadores confirmados para sortear.');
+      return;
+    }
+    // Si no es múltiplo de 4, se descartan los últimos al azar (quedan afuera de esta fecha)
+    jugadores = mezclarArray(jugadores);
+    const sobran = jugadores.length % 4;
+    let descartados = [];
+    if (sobran > 0) {
+      descartados = jugadores.slice(jugadores.length - sobran);
+      jugadores = jugadores.slice(0, jugadores.length - sobran);
+    }
+
+    const respetarLado = document.querySelector('#opcionLado .chip.selected').dataset.valor === 'respetar';
+    const balancear = document.querySelector('#opcionNivel .chip.selected').dataset.valor === 'balancear';
+
+    let parejas = [];
+
+    if (balancear) {
+      jugadores.sort((a,b) => categoriaValor[a.categoria] - categoriaValor[b.categoria]);
+    } else {
+      jugadores = mezclarArray(jugadores);
+    }
+
+    if (respetarLado) {
+      parejas = armarParejasPorLado(jugadores, balancear);
+    } else if (balancear) {
+      let izq = 0, der = jugadores.length - 1;
+      while (izq < der) {
+        parejas.push([jugadores[izq], jugadores[der]]);
+        izq++; der--;
+      }
+    } else {
+      for (let i = 0; i < jugadores.length; i += 2) {
+        parejas.push([jugadores[i], jugadores[i+1]]);
+      }
+    }
+
+    // Formar cruces (parejas enfrentadas, de 2 en 2)
+    parejas = mezclarArray(parejas);
+    let cruces = [];
+    for (let i = 0; i < parejas.length; i += 2) {
+      if (parejas[i+1]) {
+        cruces.push([parejas[i], parejas[i+1]]);
+      } else {
+        cruces.push([parejas[i], null]); // pareja libre/descansa
+      }
+    }
+
+    // Limitar cruces simultáneos a la cantidad de pistas disponibles hoy
+    const pistasHoy = valores.pistasHoy;
+    let parejasLibres = [];
+    if (cruces.length > pistasHoy) {
+      const excedentes = cruces.splice(pistasHoy);
+      excedentes.forEach(c => {
+        if (c[0]) parejasLibres.push(c[0]);
+        if (c[1]) parejasLibres.push(c[1]);
+      });
+    }
+
+    mostrarResultadoSorteo(cruces, descartados, respetarLado, balancear, parejasLibres);
+  }
+
+  function mostrarResultadoSorteo(cruces, descartados, respetarLado, balancear, parejasLibres = []) {
+    const cont = document.getElementById('resultadoSorteo');
+    let html = '<h4>Cruces sugeridos</h4>';
+
+    cruces.forEach((cruce, i) => {
+      const [pareja1, pareja2] = cruce;
+      html += `<div style="border:1px solid #ddd; border-radius:8px; padding:10px; margin-bottom:8px;">`;
+      html += `<strong>Cruce ${i+1}</strong><br>`;
+      html += formatearPareja(pareja1, respetarLado);
+      if (pareja2) {
+        html += '<br><span style="color:var(--naranja); font-weight:bold;">vs</span><br>';
+        html += formatearPareja(pareja2, respetarLado);
+      } else {
+        html += '<br><em>Descansa esta ronda</em>';
+      }
+      html += `</div>`;
+    });
+
+    if (descartados.length > 0) {
+      html += `<p style="color:var(--gris);">Quedan sin asignar (no completan grupo de 4): ${descartados.map(j=>j.nombre).join(', ')}</p>`;
+    }
+
+    if (parejasLibres.length > 0) {
+      html += `<p style="color:var(--gris);">Esperan su turno (no hay pista disponible): ${parejasLibres.map(j=>j.nombre).join(', ')}</p>`;
+    }
+
+    cont.innerHTML = html;
+  }
+
+  function formatearPareja(pareja, respetarLado) {
+    const [j1, j2] = pareja;
+    let texto = `${j1.nombre} (${j1.categoria}, ${j1.lado}) + ${j2.nombre} (${j2.categoria}, ${j2.lado})`;
+    if (respetarLado) {
+      const ladosOk = (j1.lado !== j2.lado) || j1.lado === 'Ambos' || j2.lado === 'Ambos';
+      if (!ladosOk) {
+        texto += ' <span style="color:var(--naranja);">⚠ comparten lado preferido (grupo excedente)</span>';
+      }
+    }
+    return texto;
+  }
+
+  async function abrirUnirse() {
+    const miNombre = localStorage.getItem('miNombre');
+    if (!miNombre) {
+      alert('Primero completá tu perfil en "Mi Perfil" antes de unirte a un torneo.');
+      return;
+    }
+    document.getElementById('codigoUnirse').value = '';
+    goTo('screen-unirse');
+  }
+
+  async function buscarTorneo() {
+    const codigo = document.getElementById('codigoUnirse').value.trim().toUpperCase();
+    if (codigo.length !== 4) {
+      alert('El código debe tener 4 letras.');
+      return;
+    }
+
+    const torneoSnap = await getDoc(doc(db, 'torneos', codigo));
+    if (!torneoSnap.exists()) {
+      alert('No se encontró ningún torneo con ese código.');
+      return;
+    }
+    const torneo = torneoSnap.data();
+
+    const miNombre = localStorage.getItem('miNombre');
+    const snap = await getDoc(doc(db, 'jugadores', miNombre));
+    const perfil = snap.data();
+
+    localStorage.setItem('torneoSeleccionado', codigo);
+
+    document.getElementById('tituloTorneoUnirse').textContent = 'Torneo: ' + torneo.nombre;
+    document.getElementById('resumenPerfilUnirse').innerHTML =
+      `<strong>${perfil.nombre}</strong><br>
+       Brazo hábil: ${perfil.brazo}<br>
+       Lado preferido: ${perfil.lado}<br>
+       Categoría: ${perfil.categoria}`;
+
+    goTo('screen-confirmar-ingreso');
+  }
+
+  async function confirmarIngreso() {
+    const codigo = localStorage.getItem('torneoSeleccionado');
+    const miNombre = localStorage.getItem('miNombre');
+    const ref = doc(db, 'torneos', codigo);
+
+    const torneoSnap = await getDoc(ref);
+    const torneo = torneoSnap.data();
+
+    if (!torneo.jugadores.includes(miNombre)) {
+      await setDoc(ref, { jugadores: arrayUnion(miNombre) }, { merge: true });
+    }
+
+    alert(`¡Listo! Te uniste al torneo "${torneo.nombre}".`);
+    goTo('screen-inicio');
+  }
+
+  function seleccionarUnico(el) {
+    if (el.parentElement.classList.contains('bloqueado')) return;
+    [...el.parentElement.children].forEach(c => c.classList.remove('selected'));
+    el.classList.add('selected');
+  }
+
+  async function abrirPerfil() {
+    goTo('screen-perfil');
+    const miNombre = localStorage.getItem('miNombre');
+
+    if (miNombre) {
+      const ref = doc(db, 'jugadores', miNombre);
+      const snap = await getDoc(ref);
+      if (snap.exists()) {
+        const perfil = snap.data();
+        document.getElementById('perfilNombre').value = perfil.nombre;
+        document.getElementById('perfilPin').value = '';
+        marcarChip('perfilBrazo', perfil.brazo);
+        marcarChip('perfilLado', perfil.lado);
+        marcarChip('perfilCategoria', perfil.categoria);
+        bloquearCampos(true);
+        document.getElementById('btnGuardarPerfil').style.display = 'none';
+        document.getElementById('btnEditarPerfil').style.display = 'block';
+        return;
+      }
+    }
+
+    // No hay perfil guardado en este dispositivo: modo edición/creación
+    document.getElementById('perfilNombre').value = '';
+    document.getElementById('perfilPin').value = '';
+    limpiarChips('perfilBrazo');
+    limpiarChips('perfilLado');
+    limpiarChips('perfilCategoria');
+    bloquearCampos(false);
+    document.getElementById('btnGuardarPerfil').style.display = 'block';
+    document.getElementById('btnEditarPerfil').style.display = 'none';
+  }
+
+  function marcarChip(grupoId, valor) {
+    const grupo = document.getElementById(grupoId);
+    [...grupo.children].forEach(c => {
+      c.classList.toggle('selected', c.dataset.valor === valor);
+    });
+  }
+
+  function limpiarChips(grupoId) {
+    [...document.getElementById(grupoId).children].forEach(c => c.classList.remove('selected'));
+  }
+
+  function bloquearCampos(bloquear) {
+    document.getElementById('perfilNombre').disabled = bloquear;
+    document.getElementById('perfilPin').disabled = bloquear;
+    ['perfilBrazo', 'perfilLado', 'perfilCategoria'].forEach(id => {
+      const grupo = document.getElementById(id);
+      grupo.classList.toggle('bloqueado', bloquear);
+      grupo.style.opacity = bloquear ? '0.6' : '1';
+    });
+  }
+
+  async function habilitarEdicion() {
+    const miNombre = localStorage.getItem('miNombre');
+    const pinIngresado = prompt('Ingresá tu PIN de 4 dígitos para editar:');
+    if (pinIngresado === null) return;
+
+    const ref = doc(db, 'jugadores', miNombre);
+    const snap = await getDoc(ref);
+    const perfil = snap.data();
+
+    if (pinIngresado !== perfil.pin) {
+      alert('PIN incorrecto.');
+      return;
+    }
+
+    document.getElementById('perfilPin').value = '';
+    bloquearCampos(false);
+    document.getElementById('btnGuardarPerfil').style.display = 'block';
+    document.getElementById('btnEditarPerfil').style.display = 'none';
+  }
+
+  async function guardarPerfil() {
+    const nombre = document.getElementById('perfilNombre').value.trim();
+    const pin = document.getElementById('perfilPin').value.trim();
+    const brazo = document.querySelector('#perfilBrazo .chip.selected');
+    const lado = document.querySelector('#perfilLado .chip.selected');
+    const categoria = document.querySelector('#perfilCategoria .chip.selected');
+
+    if (!nombre || !pin || !brazo || !lado || !categoria) {
+      alert('Por favor, completá todos los campos (incluido el PIN) antes de guardar.');
+      return;
+    }
+    if (!/^\d{4}$/.test(pin)) {
+      alert('El PIN debe ser de 4 dígitos numéricos.');
+      return;
+    }
+
+    const miNombreActual = localStorage.getItem('miNombre');
+    const ref = doc(db, 'jugadores', nombre);
+
+    // Si el nombre ya existe y no es mi propio perfil, avisar y pedir otro nombre
+    if (nombre !== miNombreActual) {
+      const snap = await getDoc(ref);
+      if (snap.exists()) {
+        alert(`El nombre "${nombre}" ya está en uso. Por favor, elegí otro nombre.`);
+        return;
+      }
+    }
+
+    const perfil = {
+      nombre: nombre,
+      pin: pin,
+      brazo: brazo.dataset.valor,
+      lado: lado.dataset.valor,
+      categoria: categoria.dataset.valor
+    };
+
+    await setDoc(ref, perfil);
+    localStorage.setItem('miNombre', nombre);
+
+    bloquearCampos(true);
+    document.getElementById('perfilPin').value = '';
+    document.getElementById('btnGuardarPerfil').style.display = 'none';
+    document.getElementById('btnEditarPerfil').style.display = 'block';
+    alert('Perfil guardado correctamente.');
+  }
+  // Exponer funciones usadas desde atributos onclick del HTML
+  window.goTo = goTo;
+  window.cambiarValor = cambiarValor;
+  window.toggleChip = toggleChip;
+  window.crearTorneo = crearTorneo;
+  window.compartirTorneo = compartirTorneo;
+  window.abrirMisTorneos = abrirMisTorneos;
+  window.irAJornada = irAJornada;
+  window.irASorteo = irASorteo;
+  window.sortearParejas = sortearParejas;
+  window.abrirUnirse = abrirUnirse;
+  window.buscarTorneo = buscarTorneo;
+  window.confirmarIngreso = confirmarIngreso;
+  window.seleccionarUnico = seleccionarUnico;
+  window.abrirPerfil = abrirPerfil;
+  window.habilitarEdicion = habilitarEdicion;
+  window.guardarPerfil = guardarPerfil;
+  window.confirmarAsistencia = confirmarAsistencia;
+</script>
+</body>
+</html>
