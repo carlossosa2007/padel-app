@@ -187,6 +187,9 @@
 
     <button class="btn-primary" id="btnConfirmarAsistencia" onclick="confirmarAsistencia()">Confirmar asistencia</button>
 
+    <label>Jugadores frecuentes no confirmados</label>
+    <div id="listaNoConfirmados" style="display:flex; flex-direction:column; gap:6px;"></div>
+
     <button class="btn-secondary" id="btnVerTorneo" onclick="abrirVerTorneo()" style="display:none;">Ver torneo</button>
   </div>
 
@@ -203,16 +206,21 @@
 
     <label>Formato de set para hoy</label>
     <select id="formatoSetHoy">
+      <option value="3">Sets a 3 games</option>
       <option value="4">Sets a 4 games</option>
+      <option value="5">Sets a 5 games</option>
       <option value="6">Sets a 6 games</option>
     </select>
 
-    <h3>Jugadores confirmados para hoy</h3>
-    <p style="color:var(--gris); margin-top:-10px;">Tocá para marcar quién juega esta fecha</p>
+    <h3>Jugadores confirmados</h3>
 
     <div id="listaJornada" class="chips"></div>
 
+    <button class="btn-secondary" onclick="retirarInscripcion()">Retirar mi inscripción</button>
+
     <button class="btn-primary" onclick="irASorteo()">Sortear parejas</button>
+    <button class="btn-secondary" onclick="alert('Próximamente: estadísticas del torneo')">Ver estadísticas del torneo</button>
+    <button class="btn-secondary" onclick="alert('Próximamente: estadísticas de jugador')">Ver estadísticas de jugador</button>
   </div>
 
   <!-- PANTALLA SORTEO -->
@@ -222,19 +230,21 @@
 
     <label>Lado de la pista</label>
     <div class="chips" id="opcionLado">
-      <div class="chip selected" data-valor="respetar" onclick="seleccionarUnico(this)">Respetar lado preferido</div>
-      <div class="chip" data-valor="libre" onclick="seleccionarUnico(this)">No respetar lado</div>
+      <div class="chip" data-valor="respetar" onclick="seleccionarUnico(this)">Respetar lado preferido</div>
+      <div class="chip selected" data-valor="libre" onclick="seleccionarUnico(this)">No respetar lado</div>
     </div>
 
     <label>Nivel de jugadores</label>
     <div class="chips" id="opcionNivel">
-      <div class="chip selected" data-valor="balancear" onclick="seleccionarUnico(this)">Balancear por categoría</div>
-      <div class="chip" data-valor="libre" onclick="seleccionarUnico(this)">Sin balancear</div>
+      <div class="chip" data-valor="balancear" onclick="seleccionarUnico(this)">Balancear por categoría</div>
+      <div class="chip selected" data-valor="libre" onclick="seleccionarUnico(this)">Sin balancear</div>
     </div>
 
-    <button class="btn-primary" onclick="sortearParejas()">Generar cruces</button>
+    <button class="btn-primary" id="btnGenerarCruces" onclick="sortearParejas()">Generar cruces iniciales</button>
 
     <div id="resultadoSorteo"></div>
+
+    <button class="btn-primary" id="btnCompartirCruces" onclick="compartirCruces()" style="display:none;">Compartir cruces</button>
   </div>
 
   <!-- PANTALLA UNIRSE A TORNEO -->
@@ -302,7 +312,7 @@
 <script type="module">
   import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
   import {
-    getFirestore, doc, getDoc, setDoc, collection, getDocs, query, where, arrayUnion
+    getFirestore, doc, getDoc, setDoc, collection, getDocs, query, where, arrayUnion, arrayRemove
   } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 
   const firebaseConfig = {
@@ -431,12 +441,15 @@
 
   // ---- DETALLE DE TORNEO / ASISTENCIA ----
 
+  let torneoJugadores = []; // lista de nombres inscriptos en el torneo seleccionado
+
   async function abrirDetalleTorneo(codigo) {
     localStorage.setItem('torneoSeleccionado', codigo);
 
     const torneoSnap = await getDoc(doc(db, 'torneos', codigo));
     const torneo = torneoSnap.data();
     document.getElementById('tituloDetalleTorneo').textContent = 'Torneo: ' + torneo.nombre;
+    torneoJugadores = torneo.jugadores || [];
 
     await renderConfirmados(codigo);
     goTo('screen-detalle-torneo');
@@ -453,6 +466,16 @@
     } else {
       cont.innerHTML = confirmados.map(n =>
         `<div class="chip selected" style="cursor:default;">${n}</div>`
+      ).join('');
+    }
+
+    const noConfirmados = torneoJugadores.filter(n => !confirmados.includes(n));
+    const contNo = document.getElementById('listaNoConfirmados');
+    if (noConfirmados.length === 0) {
+      contNo.innerHTML = '<p style="color:var(--gris);">No hay jugadores pendientes</p>';
+    } else {
+      contNo.innerHTML = noConfirmados.map(n =>
+        `<div class="chip" style="cursor:default;">${n}</div>`
       ).join('');
     }
 
@@ -488,6 +511,7 @@
   // ---- VER TORNEO / JORNADA: bolsa de jugadores ----
 
   let confirmadosData = []; // [{nombre, lado, categoria, esRandom}]
+  let jugadoresHoyData = []; // confirmados + randoms para la jornada de hoy
 
   async function abrirVerTorneo() {
     const codigo = localStorage.getItem('torneoSeleccionado');
@@ -519,21 +543,35 @@
     const necesarios = valores.pistasHoy * 4;
     const faltan = Math.max(0, necesarios - confirmadosData.length);
 
-    const jugadoresHoy = [...confirmadosData];
+    jugadoresHoyData = [...confirmadosData];
     for (let i = 1; i <= faltan; i++) {
-      jugadoresHoy.push({ nombre: `Random ${i}`, lado: 'Ambos', categoria: '8va', esRandom: true });
+      jugadoresHoyData.push({ nombre: `Random ${i}`, lado: 'Ambos', categoria: '8va', esRandom: true });
     }
 
-    jugadoresHoy.forEach(j => {
+    jugadoresHoyData.forEach(j => {
       const div = document.createElement('div');
       div.className = 'chip selected';
+      div.style.cursor = 'default';
       div.dataset.nombre = j.nombre;
       div.dataset.lado = j.lado;
       div.dataset.categoria = j.categoria;
       div.textContent = j.esRandom ? `${j.nombre} 🎲` : j.nombre;
-      div.onclick = () => div.classList.toggle('selected');
       lista.appendChild(div);
     });
+  }
+
+  async function retirarInscripcion() {
+    const codigo = localStorage.getItem('torneoSeleccionado');
+    const miNombre = localStorage.getItem('miNombre');
+    const fecha = fechaHoy();
+    const ref = doc(db, 'torneos', codigo, 'asistencias', fecha);
+
+    if (!confirm('¿Confirmás que querés retirar tu inscripción para hoy?')) return;
+
+    await setDoc(ref, { confirmados: arrayRemove(miNombre) }, { merge: true });
+
+    await renderConfirmados(codigo);
+    goTo('screen-detalle-torneo');
   }
 
   // ---- SORTEO DE PAREJAS ----
@@ -544,6 +582,12 @@
 
   function irASorteo() {
     document.getElementById('resultadoSorteo').innerHTML = '';
+    document.getElementById('btnGenerarCruces').disabled = false;
+    document.getElementById('btnGenerarCruces').style.display = 'block';
+    document.getElementById('btnCompartirCruces').style.display = 'none';
+    document.getElementById('opcionLado').classList.remove('bloqueado');
+    document.getElementById('opcionNivel').classList.remove('bloqueado');
+    [...document.querySelectorAll('#opcionLado .chip, #opcionNivel .chip')].forEach(c => c.style.opacity = '1');
     goTo('screen-sorteo');
   }
 
@@ -607,12 +651,10 @@
   }
 
   function sortearParejas() {
-    const seleccionados = [...document.querySelectorAll('#listaJornada .chip.selected')];
-
-    let jugadores = seleccionados.map(c => ({
-      nombre: c.dataset.nombre,
-      lado: c.dataset.lado,
-      categoria: c.dataset.categoria
+    let jugadores = jugadoresHoyData.map(j => ({
+      nombre: j.nombre,
+      lado: j.lado,
+      categoria: j.categoria
     }));
 
     if (jugadores.length < 4) {
@@ -676,22 +718,36 @@
     }
 
     mostrarResultadoSorteo(cruces, descartados, respetarLado, balancear, parejasLibres);
+
+    // Congelar: ya no se puede volver a sortear, solo compartir
+    document.getElementById('btnGenerarCruces').disabled = true;
+    document.getElementById('btnGenerarCruces').style.display = 'none';
+    document.getElementById('btnCompartirCruces').style.display = 'block';
+    document.getElementById('opcionLado').classList.add('bloqueado');
+    document.getElementById('opcionNivel').classList.add('bloqueado');
+    [...document.querySelectorAll('#opcionLado .chip, #opcionNivel .chip')].forEach(c => c.style.opacity = '0.6');
   }
+
+  let textoCrucesCompartir = '';
 
   function mostrarResultadoSorteo(cruces, descartados, respetarLado, balancear, parejasLibres = []) {
     const cont = document.getElementById('resultadoSorteo');
     let html = '<h4>Cruces sugeridos</h4>';
+    let texto = '🎾 Cruces de hoy:\n';
 
     cruces.forEach((cruce, i) => {
       const [pareja1, pareja2] = cruce;
       html += `<div style="border:1px solid #ddd; border-radius:8px; padding:10px; margin-bottom:8px;">`;
       html += `<strong>Cruce ${i+1}</strong><br>`;
       html += formatearPareja(pareja1, respetarLado);
+      texto += `\nCruce ${i+1}:\n${pareja1[0].nombre} + ${pareja1[1].nombre}`;
       if (pareja2) {
         html += '<br><span style="color:var(--naranja); font-weight:bold;">vs</span><br>';
         html += formatearPareja(pareja2, respetarLado);
+        texto += `\nvs\n${pareja2[0].nombre} + ${pareja2[1].nombre}\n`;
       } else {
         html += '<br><em>Descansa esta ronda</em>';
+        texto += `\n(Descansa esta ronda)\n`;
       }
       html += `</div>`;
     });
@@ -702,9 +758,16 @@
 
     if (parejasLibres.length > 0) {
       html += `<p style="color:var(--gris);">Esperan su turno (no hay pista disponible): ${parejasLibres.map(j=>j.nombre).join(', ')}</p>`;
+      texto += `\nEsperan turno: ${parejasLibres.map(j=>j.nombre).join(', ')}`;
     }
 
     cont.innerHTML = html;
+    textoCrucesCompartir = texto;
+  }
+
+  function compartirCruces() {
+    const url = `https://wa.me/?text=${encodeURIComponent(textoCrucesCompartir)}`;
+    window.open(url, '_blank');
   }
 
   function formatearPareja(pareja, respetarLado) {
@@ -917,6 +980,8 @@
   window.habilitarEdicion = habilitarEdicion;
   window.guardarPerfil = guardarPerfil;
   window.confirmarAsistencia = confirmarAsistencia;
+  window.retirarInscripcion = retirarInscripcion;
+  window.compartirCruces = compartirCruces;
 </script>
 </body>
 </html>
