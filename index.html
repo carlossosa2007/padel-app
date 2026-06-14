@@ -159,6 +159,17 @@
     <button class="btn-primary" onclick="crearTorneo()">Crear torneo</button>
   </div>
 
+  <!-- PANTALLA TORNEO CREADO -->
+  <div class="screen" id="screen-compartir">
+    <h3>¡Torneo creado! 🎉</h3>
+    <h3 id="tituloTorneoCreado"></h3>
+    <p>Código del torneo:</p>
+    <h1 id="codigoTorneo" style="color: var(--verde); letter-spacing: 6px; text-align:center;"></h1>
+    <p>Compartí este código con tus amigos para que se unan al torneo.</p>
+    <button class="btn-primary" onclick="compartirTorneo()">Compartir por WhatsApp</button>
+    <button class="btn-secondary" onclick="goTo('screen-inicio')">Ir al inicio</button>
+  </div>
+
   <!-- PANTALLA MIS TORNEOS: lista -->
   <div class="screen" id="screen-mistorneos">
     <button class="btn-volver" onclick="goTo('screen-inicio')">&larr; Volver</button>
@@ -359,7 +370,12 @@
       jugadores: [miNombre]
     };
 
-    await setDoc(doc(db, 'torneos', codigo), torneo);
+    try {
+      await setDoc(doc(db, 'torneos', codigo), torneo);
+    } catch (e) {
+      alert('Error al crear el torneo: ' + e.message);
+      return;
+    }
 
     document.getElementById('tituloTorneoCreado').textContent = 'Torneo: ' + torneo.nombre;
     document.getElementById('codigoTorneo').textContent = torneo.codigo;
