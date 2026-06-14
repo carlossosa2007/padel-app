@@ -187,7 +187,7 @@
 
     <button class="btn-primary" id="btnConfirmarAsistencia" onclick="confirmarAsistencia()">Confirmar asistencia</button>
 
-    <button class="btn-secondary" onclick="irAJornada()">Continuar a sorteo de hoy</button>
+    <button class="btn-secondary" id="btnVerTorneo" onclick="abrirVerTorneo()" style="display:none;">Ver torneo</button>
   </div>
 
   <!-- PANTALLA JORNADA: bolsa de jugadores -->
@@ -330,6 +330,7 @@
     if (nuevo > 7) nuevo = 7;
     valores[campo] = nuevo;
     document.getElementById(campo).textContent = nuevo;
+    if (campo === 'pistasHoy') renderListaJornada();
   }
 
   function toggleChip(el) {
@@ -464,6 +465,8 @@
       btn.textContent = 'Confirmar asistencia';
       btn.disabled = false;
     }
+
+    document.getElementById('btnVerTorneo').style.display = confirmados.length > 0 ? 'block' : 'none';
   }
 
   async function confirmarAsistencia() {
@@ -482,36 +485,55 @@
     await renderConfirmados(codigo);
   }
 
-  // ---- JORNADA: bolsa de jugadores ----
+  // ---- VER TORNEO / JORNADA: bolsa de jugadores ----
 
-  async function irAJornada() {
+  let confirmadosData = []; // [{nombre, lado, categoria, esRandom}]
+
+  async function abrirVerTorneo() {
     const codigo = localStorage.getItem('torneoSeleccionado');
     const fecha = fechaHoy();
 
     const asistSnap = await getDoc(doc(db, 'torneos', codigo, 'asistencias', fecha));
     const confirmados = asistSnap.exists() ? asistSnap.data().confirmados : [];
 
-    const lista = document.getElementById('listaJornada');
-    lista.innerHTML = '';
+    confirmadosData = [];
+    for (const nombre of confirmados) {
+      const perfilSnap = await getDoc(doc(db, 'jugadores', nombre));
+      const j = perfilSnap.data();
+      confirmadosData.push({ nombre: j.nombre, lado: j.lado, categoria: j.categoria, esRandom: false });
+    }
 
     valores.pistasHoy = 1;
     document.getElementById('pistasHoy').textContent = '1';
     document.getElementById('formatoSetHoy').value = '4';
 
-    for (const nombre of confirmados) {
-      const perfilSnap = await getDoc(doc(db, 'jugadores', nombre));
-      const j = perfilSnap.data();
+    renderListaJornada();
+    goTo('screen-jornada');
+  }
+
+  function renderListaJornada() {
+    const lista = document.getElementById('listaJornada');
+    lista.innerHTML = '';
+
+    // Cada pista necesita 4 jugadores. Si faltan, se completan con "Random N".
+    const necesarios = valores.pistasHoy * 4;
+    const faltan = Math.max(0, necesarios - confirmadosData.length);
+
+    const jugadoresHoy = [...confirmadosData];
+    for (let i = 1; i <= faltan; i++) {
+      jugadoresHoy.push({ nombre: `Random ${i}`, lado: 'Ambos', categoria: '8va', esRandom: true });
+    }
+
+    jugadoresHoy.forEach(j => {
       const div = document.createElement('div');
-      div.className = 'chip selected'; // por defecto todos confirmados
+      div.className = 'chip selected';
       div.dataset.nombre = j.nombre;
       div.dataset.lado = j.lado;
       div.dataset.categoria = j.categoria;
-      div.textContent = j.nombre;
+      div.textContent = j.esRandom ? `${j.nombre} 🎲` : j.nombre;
       div.onclick = () => div.classList.toggle('selected');
       lista.appendChild(div);
-    }
-
-    goTo('screen-jornada');
+    });
   }
 
   // ---- SORTEO DE PAREJAS ----
@@ -884,7 +906,7 @@
   window.crearTorneo = crearTorneo;
   window.compartirTorneo = compartirTorneo;
   window.abrirMisTorneos = abrirMisTorneos;
-  window.irAJornada = irAJornada;
+  window.abrirVerTorneo = abrirVerTorneo;
   window.irASorteo = irASorteo;
   window.sortearParejas = sortearParejas;
   window.abrirUnirse = abrirUnirse;
