@@ -46,6 +46,8 @@
   .screen.active { display: flex; }
 
   button {
+    width: 100%;
+    box-sizing: border-box;
     padding: 14px;
     border: none;
     border-radius: 10px;
@@ -145,7 +147,7 @@
       <button onclick="cambiarValor('frecuencia', 1)">+</button>
     </div>
 
-    <label>Días de juego</label>
+    <label>Días más frecuentes de juego</label>
     <div class="chips" id="diasJuego">
       <div class="chip" onclick="toggleChip(this)">Lunes</div>
       <div class="chip" onclick="toggleChip(this)">Martes</div>
@@ -155,6 +157,12 @@
       <div class="chip" onclick="toggleChip(this)">Sábado</div>
       <div class="chip" onclick="toggleChip(this)">Domingo</div>
     </div>
+
+    <label>Hora de juego</label>
+    <input type="time" id="horaTorneo">
+
+    <label>Club frecuente</label>
+    <input type="text" id="clubTorneo" placeholder="Nombre del club">
 
     <button class="btn-primary" onclick="crearTorneo()">Crear torneo</button>
   </div>
@@ -182,6 +190,13 @@
     <button class="btn-volver" onclick="goTo('screen-mistorneos')">&larr; Volver</button>
     <h3 id="tituloDetalleTorneo"></h3>
 
+    <div style="background:var(--fondo); border-radius:8px; padding:10px; display:flex; flex-direction:column; gap:4px;">
+      <p style="margin:0;"><strong>Código:</strong> <span id="detalleCodigo"></span></p>
+      <p style="margin:0;"><strong>Club frecuente:</strong> <span id="detalleClub"></span></p>
+      <p style="margin:0;"><strong>Días más frecuentes:</strong> <span id="detalleDias"></span></p>
+      <p style="margin:0;"><strong>Hora de juego:</strong> <span id="detalleHora"></span></p>
+    </div>
+
     <label>Asistencia de hoy</label>
     <div id="listaConfirmados" style="display:flex; flex-direction:column; gap:6px;"></div>
 
@@ -201,11 +216,11 @@
 
     <!-- Info de la jornada -->
     <div style="background:var(--fondo); border-radius:8px; padding:10px; display:flex; flex-direction:column; gap:4px;">
-      <p style="margin:0;"><strong>Día de juego:</strong> <span id="infoDia"></span></p>
+      <p style="margin:0;"><strong>Días más frecuentes de juego:</strong> <span id="infoDias"></span></p>
       <p style="margin:0;"><strong>Hora de juego:</strong> <span id="infoHora"></span></p>
       <p style="margin:0;"><strong>Club:</strong> <span id="infoClub"></span></p>
-      <p style="margin:0;"><strong>Cantidad de pistas para hoy:</strong> <span id="infoPistas"></span></p>
-      <p style="margin:0;"><strong>Formato de set para hoy:</strong> <span id="infoFormato"></span></p>
+      <p style="margin:0; display:none;" id="filaInfoPistas"><strong>Cantidad de pistas para hoy:</strong> <span id="infoPistas"></span></p>
+      <p style="margin:0; display:none;" id="filaInfoFormato"><strong>Formato de set para hoy:</strong> <span id="infoFormato"></span></p>
       <p style="margin:0;"><strong>Jugadores confirmados:</strong> <span id="infoConfirmados"></span></p>
     </div>
 
@@ -441,6 +456,8 @@
       nombre: nombre,
       frecuencia: valores.frecuencia,
       dias: diasSeleccionados,
+      hora: document.getElementById('horaTorneo').value || '',
+      club: document.getElementById('clubTorneo').value.trim() || '',
       codigo: codigo,
       jugadores: [miNombre]
     };
@@ -470,12 +487,6 @@
 
   function fechaHoy() {
     return new Date().toISOString().slice(0, 10); // YYYY-MM-DD
-  }
-
-  function nombreDiaSemana(fechaStr) {
-    const dias = ['Domingo','Lunes','Martes','Miércoles','Jueves','Viernes','Sábado'];
-    const d = new Date(fechaStr + 'T00:00:00');
-    return dias[d.getDay()];
   }
 
   async function abrirMisTorneos() {
@@ -512,13 +523,19 @@
   // ---- DETALLE DE TORNEO / ASISTENCIA ----
 
   let torneoJugadores = []; // lista de nombres inscriptos en el torneo seleccionado
+  let torneoInfo = null; // datos completos del torneo seleccionado (nombre, dias, hora, club, codigo)
 
   async function abrirDetalleTorneo(codigo) {
     localStorage.setItem('torneoSeleccionado', codigo);
 
     const torneoSnap = await getDoc(doc(db, 'torneos', codigo));
     const torneo = torneoSnap.data();
+    torneoInfo = torneo;
     document.getElementById('tituloDetalleTorneo').textContent = 'Torneo: ' + torneo.nombre;
+    document.getElementById('detalleCodigo').textContent = torneo.codigo;
+    document.getElementById('detalleClub').textContent = torneo.club || 'Sin definir';
+    document.getElementById('detalleDias').textContent = (torneo.dias && torneo.dias.length > 0) ? torneo.dias.join(', ') : 'Sin definir';
+    document.getElementById('detalleHora').textContent = torneo.hora || 'Sin definir';
     torneoJugadores = torneo.jugadores || [];
 
     await renderConfirmados(codigo);
@@ -598,6 +615,11 @@
     const codigo = localStorage.getItem('torneoSeleccionado');
     const fecha = fechaHoy();
 
+    if (!torneoInfo || torneoInfo.codigo !== codigo) {
+      const torneoSnap = await getDoc(doc(db, 'torneos', codigo));
+      torneoInfo = torneoSnap.exists() ? torneoSnap.data() : null;
+    }
+
     const asistSnap = await getDoc(doc(db, 'torneos', codigo, 'asistencias', fecha));
     const confirmados = asistSnap.exists() ? asistSnap.data().confirmados : [];
 
@@ -636,9 +658,10 @@
   }
 
   function renderInfoHeaderEstatica() {
-    document.getElementById('infoDia').textContent = nombreDiaSemana(fechaHoy());
-    document.getElementById('infoHora').textContent = 'Pendiente de configurar';
-    document.getElementById('infoClub').textContent = 'Pendiente de configurar';
+    const dias = (torneoInfo && torneoInfo.dias && torneoInfo.dias.length > 0) ? torneoInfo.dias.join(', ') : 'Sin definir';
+    document.getElementById('infoDias').textContent = dias;
+    document.getElementById('infoHora').textContent = (torneoInfo && torneoInfo.hora) ? torneoInfo.hora : 'Sin definir';
+    document.getElementById('infoClub').textContent = (torneoInfo && torneoInfo.club) ? torneoInfo.club : 'Sin definir';
     document.getElementById('infoConfirmados').textContent = confirmadosData.length;
   }
 
@@ -671,11 +694,17 @@
   function actualizarVistaSorteo() {
     const seccionCruces = document.getElementById('seccionCruces');
 
-    // Pistas y formato vigentes (del sorteo si es válido, o de la configuración actual)
-    const pistasMostrar = sorteoValido ? sorteoExistente.pistas : valores.pistasHoy;
-    const formatoMostrar = sorteoValido ? sorteoExistente.formatoSet : valores.formatoSetHoy;
-    document.getElementById('infoPistas').textContent = pistasMostrar;
-    document.getElementById('infoFormato').textContent = 'Sets a ' + formatoMostrar + ' games';
+    // Pistas y formato: solo se muestran si hay administrador (o ya hay sorteo), porque las define el admin
+    const mostrarPistasFormato = !!adminHoy || sorteoValido;
+    document.getElementById('filaInfoPistas').style.display = mostrarPistasFormato ? 'block' : 'none';
+    document.getElementById('filaInfoFormato').style.display = mostrarPistasFormato ? 'block' : 'none';
+
+    if (mostrarPistasFormato) {
+      const pistasMostrar = sorteoValido ? sorteoExistente.pistas : valores.pistasHoy;
+      const formatoMostrar = sorteoValido ? sorteoExistente.formatoSet : valores.formatoSetHoy;
+      document.getElementById('infoPistas').textContent = pistasMostrar;
+      document.getElementById('infoFormato').textContent = 'Sets a ' + formatoMostrar + ' games';
+    }
 
     if (sorteoValido) {
       seccionCruces.style.display = 'flex';
@@ -695,6 +724,7 @@
   function renderSeccionAdmin() {
     const cont = document.getElementById('seccionAdmin');
     const miNombre = localStorage.getItem('miNombre');
+    const estoyConfirmado = confirmadosData.some(j => j.nombre === miNombre);
 
     if (!adminHoy) {
       cont.innerHTML = `
@@ -703,8 +733,12 @@
       return;
     }
 
-    if (miNombre !== adminHoy || sorteoValido) {
-      cont.innerHTML = `<p style="background:var(--verde-claro); color:var(--verde); padding:10px; border-radius:8px;">👑 Administrador de hoy: <strong>${adminHoy}</strong></p>`;
+    if (miNombre !== adminHoy || sorteoValido || !estoyConfirmado) {
+      let html = `<p style="background:var(--verde-claro); color:var(--verde); padding:10px; border-radius:8px;">👑 Administrador de hoy: <strong>${adminHoy}</strong></p>`;
+      if (miNombre === adminHoy && !estoyConfirmado) {
+        html += `<p style="color:var(--gris);">Retiraste tu inscripción de hoy. Podés ver la información del torneo, pero no administrar, sortear ni armar parejas.</p>`;
+      }
+      cont.innerHTML = html;
       return;
     }
 
@@ -778,7 +812,7 @@
       div.className = 'chip' + (miPropuesta === j.nombre ? ' selected' : '');
       div.dataset.valor = j.nombre;
       div.textContent = j.nombre;
-      div.onclick = () => seleccionarUnico(div);
+      div.onclick = () => seleccionarToggle(div);
       cont.appendChild(div);
     });
 
@@ -1482,6 +1516,13 @@
     if (el.parentElement.classList.contains('bloqueado')) return;
     [...el.parentElement.children].forEach(c => c.classList.remove('selected'));
     el.classList.add('selected');
+  }
+
+  function seleccionarToggle(el) {
+    if (el.parentElement.classList.contains('bloqueado')) return;
+    const yaSeleccionado = el.classList.contains('selected');
+    [...el.parentElement.children].forEach(c => c.classList.remove('selected'));
+    if (!yaSeleccionado) el.classList.add('selected');
   }
 
   async function abrirPerfil() {
