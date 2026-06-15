@@ -197,29 +197,52 @@
   <div class="screen" id="screen-jornada">
     <button class="btn-volver" onclick="goTo('screen-detalle-torneo')">&larr; Volver</button>
 
-    <label>Cantidad de pistas hoy</label>
-    <div class="stepper">
-      <button onclick="cambiarValor('pistasHoy', -1)">-</button>
-      <span id="pistasHoy">1</span>
-      <button onclick="cambiarValor('pistasHoy', 1)">+</button>
+    <div id="bannerJornada"></div>
+
+    <!-- Pistas: editable (sin sorteo) o fijo (con sorteo) -->
+    <div id="pistasEditable">
+      <label>Cantidad de pistas hoy</label>
+      <div class="stepper">
+        <button onclick="cambiarValor('pistasHoy', -1)">-</button>
+        <span id="pistasHoy">1</span>
+        <button onclick="cambiarValor('pistasHoy', 1)">+</button>
+      </div>
+    </div>
+    <div id="pistasFijo" style="display:none;">
+      <label>Cantidad de pistas para hoy</label>
+      <p id="pistasFijoValor" style="font-size:18px; font-weight:bold; margin:0;"></p>
     </div>
 
-    <label>Formato de set para hoy</label>
-    <select id="formatoSetHoy">
-      <option value="3">Sets a 3 games</option>
-      <option value="4">Sets a 4 games</option>
-      <option value="5">Sets a 5 games</option>
-      <option value="6">Sets a 6 games</option>
-    </select>
+    <!-- Formato de set: editable (sin sorteo) o fijo (con sorteo) -->
+    <div id="formatoEditable">
+      <label>Formato de set para hoy</label>
+      <select id="formatoSetHoy">
+        <option value="3">Sets a 3 games</option>
+        <option value="4">Sets a 4 games</option>
+        <option value="5">Sets a 5 games</option>
+        <option value="6">Sets a 6 games</option>
+      </select>
+    </div>
+    <div id="formatoFijo" style="display:none;">
+      <label>Formato de sets para hoy</label>
+      <p id="formatoFijoValor" style="font-size:18px; font-weight:bold; margin:0;"></p>
+    </div>
 
     <h3>Jugadores confirmados</h3>
     <p style="color:var(--gris); margin-top:-10px;">Tocá un jugador para ver sus estadísticas</p>
 
-    <div id="bannerJornada"></div>
-
     <div id="listaJornada" class="chips"></div>
 
-    <button class="btn-secondary" onclick="retirarInscripcion()">Retirar mi inscripción</button>
+    <!-- Parejas y cruces iniciales (sólo si ya hay sorteo válido) -->
+    <div id="seccionCruces" style="display:none;">
+      <label>Parejas y cruces iniciales</label>
+      <div id="crucesGuardadosView"></div>
+      <button class="btn-secondary" onclick="compartirCruces()">Compartir cruces</button>
+
+      <div id="seccionCuestionamiento"></div>
+    </div>
+
+    <button class="btn-secondary" id="btnRetirarInscripcion" onclick="retirarInscripcion()">Retirar mi inscripción</button>
 
     <button class="btn-primary" id="btnSortearParejas" onclick="irASorteo()">Sortear parejas</button>
     <button class="btn-secondary" onclick="alert('Próximamente: estadísticas del torneo')">Ver estadísticas del torneo</button>
@@ -229,30 +252,21 @@
   <!-- PANTALLA SORTEO -->
   <div class="screen" id="screen-sorteo">
     <button class="btn-volver" onclick="goTo('screen-jornada')">&larr; Volver</button>
+    <h3>Opciones de sorteo</h3>
 
-    <div id="bannerSorteoView"></div>
+    <label>Lado de la pista</label>
+    <div class="chips" id="opcionLado">
+      <div class="chip" data-valor="respetar" onclick="seleccionarUnico(this)">Respetar lado preferido</div>
+      <div class="chip selected" data-valor="libre" onclick="seleccionarUnico(this)">No respetar lado</div>
+    </div>
 
-    <div id="opcionesSorteo">
-      <h3>Opciones de sorteo</h3>
-
-      <label>Lado de la pista</label>
-      <div class="chips" id="opcionLado">
-        <div class="chip" data-valor="respetar" onclick="seleccionarUnico(this)">Respetar lado preferido</div>
-        <div class="chip selected" data-valor="libre" onclick="seleccionarUnico(this)">No respetar lado</div>
-      </div>
-
-      <label>Nivel de jugadores</label>
-      <div class="chips" id="opcionNivel">
-        <div class="chip" data-valor="balancear" onclick="seleccionarUnico(this)">Balancear por categoría</div>
-        <div class="chip selected" data-valor="libre" onclick="seleccionarUnico(this)">Sin balancear</div>
-      </div>
+    <label>Nivel de jugadores</label>
+    <div class="chips" id="opcionNivel">
+      <div class="chip" data-valor="balancear" onclick="seleccionarUnico(this)">Balancear por categoría</div>
+      <div class="chip selected" data-valor="libre" onclick="seleccionarUnico(this)">Sin balancear</div>
     </div>
 
     <button class="btn-primary" id="btnGenerarCruces" onclick="sortearParejas()">Generar cruces iniciales</button>
-
-    <div id="resultadoSorteo"></div>
-
-    <button class="btn-primary" id="btnCompartirCruces" onclick="compartirCruces()" style="display:none;">Compartir cruces</button>
   </div>
 
   <!-- PANTALLA UNIRSE A TORNEO -->
@@ -570,25 +584,68 @@
   function recalcularValidezSorteo() {
     const confirmadosNombres = confirmadosData.map(j => j.nombre);
     sorteoValido = !!sorteoExistente
+      && !sorteoExistente.invalidado
       && mismosJugadores(confirmadosNombres, sorteoExistente.confirmadosEnSorteo)
       && valores.pistasHoy === sorteoExistente.pistas;
     renderBannerSorteo();
+    actualizarVistaSorteo();
   }
 
   function renderBannerSorteo() {
     const banner = document.getElementById('bannerJornada');
-    const btn = document.getElementById('btnSortearParejas');
 
     if (sorteoValido) {
-      banner.innerHTML = `<p style="background:var(--verde-claro); color:var(--verde); padding:10px; border-radius:8px;">✅ El sorteo de hoy ya fue realizado por <strong>${sorteoExistente.autor}</strong>.</p>`;
-      btn.textContent = 'Ver cruces';
+      banner.innerHTML = `<p style="background:var(--verde-claro); color:var(--verde); padding:10px; border-radius:8px;">✅ El sorteo de hoy ya fue realizado por <strong>${sorteoExistente.autor}</strong>. Las parejas y cruces son definitivos.</p>`;
+    } else if (sorteoExistente && sorteoExistente.invalidado) {
+      const solicitante = sorteoExistente.cuestionamiento ? sorteoExistente.cuestionamiento.solicitante : '';
+      banner.innerHTML = `<p style="background:#fff3e0; color:var(--naranja); padding:10px; border-radius:8px;">⚠ El sorteo anterior (de <strong>${sorteoExistente.autor}</strong>) fue cuestionado por <strong>${solicitante}</strong> y el grupo aprobó repetirlo. Generá los cruces nuevamente.</p>`;
     } else if (sorteoExistente) {
       banner.innerHTML = `<p style="background:#fff3e0; color:var(--naranja); padding:10px; border-radius:8px;">⚠ El sorteo ya fue realizado por <strong>${sorteoExistente.autor}</strong>, pero la lista de jugadores cambió. Hay que generar los cruces nuevamente.</p>`;
-      btn.textContent = 'Sortear parejas';
     } else {
       banner.innerHTML = '';
-      btn.textContent = 'Sortear parejas';
     }
+  }
+
+  function actualizarVistaSorteo() {
+    const pistasEditable = document.getElementById('pistasEditable');
+    const pistasFijo = document.getElementById('pistasFijo');
+    const formatoEditable = document.getElementById('formatoEditable');
+    const formatoFijo = document.getElementById('formatoFijo');
+    const seccionCruces = document.getElementById('seccionCruces');
+    const btnSortear = document.getElementById('btnSortearParejas');
+    const btnRetirar = document.getElementById('btnRetirarInscripcion');
+
+    if (sorteoValido) {
+      pistasEditable.style.display = 'none';
+      pistasFijo.style.display = 'block';
+      document.getElementById('pistasFijoValor').textContent = sorteoExistente.pistas;
+
+      formatoEditable.style.display = 'none';
+      formatoFijo.style.display = 'block';
+      document.getElementById('formatoFijoValor').textContent = 'Sets a ' + sorteoExistente.formatoSet + ' games';
+
+      seccionCruces.style.display = 'flex';
+      seccionCruces.style.flexDirection = 'column';
+      seccionCruces.style.gap = '10px';
+      renderCrucesGuardados();
+      renderCuestionamiento();
+
+      btnSortear.style.display = 'none';
+    } else {
+      pistasEditable.style.display = 'block';
+      pistasFijo.style.display = 'none';
+
+      formatoEditable.style.display = 'block';
+      formatoFijo.style.display = 'none';
+
+      seccionCruces.style.display = 'none';
+
+      btnSortear.style.display = 'block';
+    }
+
+    const miNombre = localStorage.getItem('miNombre');
+    const estoyConfirmado = confirmadosData.some(j => j.nombre === miNombre);
+    btnRetirar.style.display = estoyConfirmado ? 'block' : 'none';
   }
 
   function renderListaJornada() {
@@ -649,39 +706,135 @@
   };
 
   function irASorteo() {
-    if (sorteoValido) {
-      mostrarSorteoGuardado();
-    } else {
-      // Modo edición: permitir generar cruces nuevos
-      document.getElementById('opcionesSorteo').style.display = 'block';
-      document.getElementById('bannerSorteoView').innerHTML = '';
-      document.getElementById('resultadoSorteo').innerHTML = '';
-      document.getElementById('btnGenerarCruces').disabled = false;
-      document.getElementById('btnGenerarCruces').style.display = 'block';
-      document.getElementById('btnCompartirCruces').style.display = 'none';
-      document.getElementById('opcionLado').classList.remove('bloqueado');
-      document.getElementById('opcionNivel').classList.remove('bloqueado');
-      [...document.querySelectorAll('#opcionLado .chip, #opcionNivel .chip')].forEach(c => c.style.opacity = '1');
-    }
+    document.getElementById('btnGenerarCruces').disabled = false;
+    document.getElementById('btnGenerarCruces').style.display = 'block';
+    document.getElementById('opcionLado').classList.remove('bloqueado');
+    document.getElementById('opcionNivel').classList.remove('bloqueado');
+    [...document.querySelectorAll('#opcionLado .chip, #opcionNivel .chip')].forEach(c => c.style.opacity = '1');
     goTo('screen-sorteo');
   }
 
-  function mostrarSorteoGuardado() {
-    document.getElementById('opcionesSorteo').style.display = 'none';
-    document.getElementById('btnGenerarCruces').style.display = 'none';
-    document.getElementById('bannerSorteoView').innerHTML =
-      `<p style="background:var(--verde-claro); color:var(--verde); padding:10px; border-radius:8px;">✅ Sorteo realizado por <strong>${sorteoExistente.autor}</strong></p>`;
+  // ---- CRUCES GUARDADOS Y CUESTIONAMIENTO ----
 
+  function renderCrucesGuardados() {
     const cruces = sorteoExistente.cruces.map(c => [c.pareja1, c.pareja2]);
-    mostrarResultadoSorteo(
+    renderCruces(
+      'crucesGuardadosView',
       cruces,
       sorteoExistente.descartados || [],
       sorteoExistente.respetarLado,
-      sorteoExistente.balancear,
-      sorteoExistente.parejasLibres || []
+      sorteoExistente.parejasLibres || [],
+      sorteoExistente.autor
     );
+  }
 
-    document.getElementById('btnCompartirCruces').style.display = 'block';
+  function renderCuestionamiento() {
+    const cont = document.getElementById('seccionCuestionamiento');
+    const miNombre = localStorage.getItem('miNombre');
+    const c = sorteoExistente.cuestionamiento;
+
+    if (!c) {
+      cont.innerHTML = `<button class="btn-secondary" onclick="cuestionarSorteo()">Cuestionar sorteo</button>`;
+      return;
+    }
+
+    if (c.estado === 'pendiente') {
+      if (miNombre === c.solicitante) {
+        cont.innerHTML = `<p style="color:var(--gris);">Cuestionaste este sorteo. Esperando la respuesta del resto del grupo...</p>`;
+      } else if (c.votosSi.includes(miNombre) || c.votosNo.includes(miNombre)) {
+        cont.innerHTML = `<p style="color:var(--gris);">Ya votaste. Esperando al resto del grupo.</p>`;
+      } else {
+        cont.innerHTML = `
+          <p style="background:#fff3e0; color:var(--naranja); padding:10px; border-radius:8px;">
+            El jugador <strong>${c.solicitante}</strong> cuestiona el sorteo. ¿Desean sortear nuevamente?
+          </p>
+          <div style="display:flex; gap:10px;">
+            <button class="btn-primary" style="flex:1;" onclick="votarCuestionamiento(true)">Sí</button>
+            <button class="btn-secondary" style="flex:1;" onclick="votarCuestionamiento(false)">No</button>
+          </div>`;
+      }
+    } else if (c.estado === 'rechazado') {
+      if (miNombre === c.solicitante) {
+        cont.innerHTML = `<p style="color:var(--naranja);">No se ha aprobado tu solicitud.</p>`;
+      } else {
+        cont.innerHTML = `<p style="color:var(--gris);">El cuestionamiento de ${c.solicitante} no fue aprobado por el grupo.</p>`;
+      }
+    } else {
+      cont.innerHTML = '';
+    }
+  }
+
+  async function cuestionarSorteo() {
+    if (sorteoExistente.cuestionamiento) {
+      alert('El sorteo de hoy ya fue cuestionado. Solo se permite una vez por sorteo.');
+      return;
+    }
+
+    if (!confirm('Estás por reclamar el sorteo, ¿deseas continuar?')) return;
+
+    const codigo = localStorage.getItem('torneoSeleccionado');
+    const fecha = fechaHoy();
+    const miNombre = localStorage.getItem('miNombre');
+
+    const elegibles = confirmadosData.filter(j => j.nombre !== miNombre).length;
+
+    const cuestionamiento = {
+      solicitante: miNombre,
+      fechaHora: new Date().toISOString(),
+      votosSi: [],
+      votosNo: [],
+      estado: elegibles === 0 ? 'rechazado' : 'pendiente'
+    };
+
+    try {
+      await setDoc(doc(db, 'torneos', codigo, 'sorteos', fecha), { cuestionamiento }, { merge: true });
+    } catch (e) {
+      alert('No se pudo registrar el cuestionamiento: ' + e.message);
+      return;
+    }
+
+    sorteoExistente.cuestionamiento = cuestionamiento;
+    renderCuestionamiento();
+  }
+
+  async function votarCuestionamiento(voto) {
+    const codigo = localStorage.getItem('torneoSeleccionado');
+    const fecha = fechaHoy();
+    const miNombre = localStorage.getItem('miNombre');
+    const c = sorteoExistente.cuestionamiento;
+
+    if (!c || c.estado !== 'pendiente') return;
+    if (miNombre === c.solicitante) return;
+    if (c.votosSi.includes(miNombre) || c.votosNo.includes(miNombre)) return;
+
+    if (voto) c.votosSi.push(miNombre);
+    else c.votosNo.push(miNombre);
+
+    const elegibles = confirmadosData.filter(j => j.nombre !== c.solicitante).length;
+    const totalVotos = c.votosSi.length + c.votosNo.length;
+
+    let invalidado = false;
+    if (c.votosSi.length > 2) {
+      c.estado = 'aprobado';
+      invalidado = true;
+    } else if (totalVotos >= elegibles) {
+      c.estado = 'rechazado';
+    }
+
+    try {
+      await setDoc(doc(db, 'torneos', codigo, 'sorteos', fecha), {
+        cuestionamiento: c,
+        invalidado: invalidado
+      }, { merge: true });
+    } catch (e) {
+      alert('No se pudo registrar el voto: ' + e.message);
+      return;
+    }
+
+    sorteoExistente.cuestionamiento = c;
+    if (invalidado) sorteoExistente.invalidado = true;
+
+    recalcularValidezSorteo();
   }
 
   function armarParejasPorLado(jugadores, balancear) {
@@ -810,17 +963,9 @@
       });
     }
 
-    mostrarResultadoSorteo(cruces, descartados, respetarLado, balancear, parejasLibres);
-
-    // Congelar: ya no se puede volver a sortear, solo compartir
-    document.getElementById('btnGenerarCruces').disabled = true;
-    document.getElementById('btnGenerarCruces').style.display = 'none';
-    document.getElementById('btnCompartirCruces').style.display = 'block';
-    document.getElementById('opcionLado').classList.add('bloqueado');
-    document.getElementById('opcionNivel').classList.add('bloqueado');
-    [...document.querySelectorAll('#opcionLado .chip, #opcionNivel .chip')].forEach(c => c.style.opacity = '0.6');
-
     await guardarSorteo(cruces, descartados, parejasLibres, respetarLado, balancear);
+
+    goTo('screen-jornada');
   }
 
   async function guardarSorteo(cruces, descartados, parejasLibres, respetarLado, balancear) {
@@ -838,7 +983,9 @@
       balancear: balancear,
       cruces: cruces.map(([p1, p2]) => ({ pareja1: p1, pareja2: p2 || null })),
       descartados: descartados,
-      parejasLibres: parejasLibres
+      parejasLibres: parejasLibres,
+      invalidado: false,
+      cuestionamiento: null
     };
 
     try {
@@ -849,23 +996,22 @@
     }
 
     sorteoExistente = sorteoDoc;
-    sorteoValido = true;
-    renderBannerSorteo();
+    recalcularValidezSorteo();
   }
 
   let textoCrucesCompartir = '';
 
-  function mostrarResultadoSorteo(cruces, descartados, respetarLado, balancear, parejasLibres = []) {
-    const cont = document.getElementById('resultadoSorteo');
-    let html = '<h4>Cruces sugeridos</h4>';
-    let texto = '🎾 Cruces de hoy:\n';
+  function renderCruces(containerId, cruces, descartados, respetarLado, parejasLibres, autor) {
+    const cont = document.getElementById(containerId);
+    let html = '';
+    let texto = `🎾 Cruces de hoy - Sorteado por ${autor}\n`;
 
     cruces.forEach((cruce, i) => {
       const [pareja1, pareja2] = cruce;
       html += `<div style="border:1px solid #ddd; border-radius:8px; padding:10px; margin-bottom:8px;">`;
-      html += `<strong>Cruce ${i+1}</strong><br>`;
+      html += `<strong>Cruce N° ${i+1}</strong> - Sorteado por ${autor}<br><br>`;
       html += formatearPareja(pareja1, respetarLado);
-      texto += `\nCruce ${i+1}:\n${pareja1[0].nombre} + ${pareja1[1].nombre}`;
+      texto += `\nCruce N° ${i+1} - Sorteado por ${autor}\n${pareja1[0].nombre} + ${pareja1[1].nombre}`;
       if (pareja2) {
         html += '<br><span style="color:var(--naranja); font-weight:bold;">vs</span><br>';
         html += formatearPareja(pareja2, respetarLado);
@@ -1107,6 +1253,8 @@
   window.confirmarAsistencia = confirmarAsistencia;
   window.retirarInscripcion = retirarInscripcion;
   window.compartirCruces = compartirCruces;
+  window.cuestionarSorteo = cuestionarSorteo;
+  window.votarCuestionamiento = votarCuestionamiento;
 </script>
 </body>
 </html>
