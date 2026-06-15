@@ -199,39 +199,23 @@
 
     <div id="bannerJornada"></div>
 
-    <!-- Pistas: editable (sin sorteo) o fijo (con sorteo) -->
-    <div id="pistasEditable">
-      <label>Cantidad de pistas hoy</label>
-      <div class="stepper">
-        <button onclick="cambiarValor('pistasHoy', -1)">-</button>
-        <span id="pistasHoy">1</span>
-        <button onclick="cambiarValor('pistasHoy', 1)">+</button>
-      </div>
-    </div>
-    <div id="pistasFijo" style="display:none;">
-      <label>Cantidad de pistas para hoy</label>
-      <p id="pistasFijoValor" style="font-size:18px; font-weight:bold; margin:0;"></p>
-    </div>
-
-    <!-- Formato de set: editable (sin sorteo) o fijo (con sorteo) -->
-    <div id="formatoEditable">
-      <label>Formato de set para hoy</label>
-      <select id="formatoSetHoy">
-        <option value="3">Sets a 3 games</option>
-        <option value="4">Sets a 4 games</option>
-        <option value="5">Sets a 5 games</option>
-        <option value="6">Sets a 6 games</option>
-      </select>
-    </div>
-    <div id="formatoFijo" style="display:none;">
-      <label>Formato de sets para hoy</label>
-      <p id="formatoFijoValor" style="font-size:18px; font-weight:bold; margin:0;"></p>
+    <!-- Info de la jornada -->
+    <div style="background:var(--fondo); border-radius:8px; padding:10px; display:flex; flex-direction:column; gap:4px;">
+      <p style="margin:0;"><strong>Día de juego:</strong> <span id="infoDia"></span></p>
+      <p style="margin:0;"><strong>Hora de juego:</strong> <span id="infoHora"></span></p>
+      <p style="margin:0;"><strong>Club:</strong> <span id="infoClub"></span></p>
+      <p style="margin:0;"><strong>Cantidad de pistas para hoy:</strong> <span id="infoPistas"></span></p>
+      <p style="margin:0;"><strong>Formato de set para hoy:</strong> <span id="infoFormato"></span></p>
+      <p style="margin:0;"><strong>Jugadores confirmados:</strong> <span id="infoConfirmados"></span></p>
     </div>
 
     <h3>Jugadores confirmados</h3>
     <p style="color:var(--gris); margin-top:-10px;">Tocá un jugador para ver sus estadísticas</p>
 
     <div id="listaJornada" class="chips"></div>
+
+    <!-- Administrador del día -->
+    <div id="seccionAdmin"></div>
 
     <!-- Parejas y cruces iniciales (sólo si ya hay sorteo válido) -->
     <div id="seccionCruces" style="display:none;">
@@ -243,13 +227,66 @@
     </div>
 
     <button class="btn-secondary" id="btnRetirarInscripcion" onclick="retirarInscripcion()">Retirar mi inscripción</button>
-
-    <button class="btn-primary" id="btnSortearParejas" onclick="irASorteo()">Sortear parejas</button>
     <button class="btn-secondary" onclick="alert('Próximamente: estadísticas del torneo')">Ver estadísticas del torneo</button>
     <button class="btn-secondary" onclick="alert('Próximamente: estadísticas de jugador')">Ver estadísticas de jugador</button>
+    <button class="btn-secondary" onclick="alert('Próximamente: mis estadísticas')">Mis estadísticas</button>
   </div>
 
-  <!-- PANTALLA SORTEO -->
+  <!-- PANTALLA ELEGIR ADMINISTRADOR -->
+  <div class="screen" id="screen-elegir-admin">
+    <button class="btn-volver" onclick="goTo('screen-jornada')">&larr; Volver</button>
+    <h3>Elegir administrador del día</h3>
+    <p style="color:var(--gris);">El administrador maneja pistas, formato y sorteo de hoy. Se necesitan 2 jugadores proponiendo al mismo (1 si hay 2 o menos inscriptos confirmados).</p>
+
+    <div id="listaCandidatosAdmin" class="chips"></div>
+
+    <button class="btn-primary" onclick="proponerAdmin()">Proponer</button>
+
+    <div id="estadoPropuestasAdmin"></div>
+  </div>
+
+  <!-- PANTALLA ARMAR PAREJAS (manual) -->
+  <div class="screen" id="screen-armar-parejas">
+    <button class="btn-volver" onclick="goTo('screen-jornada')">&larr; Volver</button>
+    <h3>Armar parejas</h3>
+    <p style="color:var(--gris);">Tocá dos jugadores para formar una pareja.</p>
+
+    <div id="disponiblesParejas" class="chips"></div>
+
+    <label>Parejas armadas</label>
+    <div id="listaParejasArmadas" style="display:flex; flex-direction:column; gap:6px;"></div>
+
+    <button class="btn-primary" onclick="confirmarParejasManual()">Confirmar parejas</button>
+  </div>
+
+  <!-- PANTALLA PAREJAS FORMADAS / ELEGIR MODO DE CRUCES -->
+  <div class="screen" id="screen-cruces">
+    <button class="btn-volver" onclick="goTo('screen-jornada')">&larr; Volver</button>
+    <h3>Parejas formadas</h3>
+
+    <div id="listaParejasFormadas" style="display:flex; flex-direction:column; gap:6px;"></div>
+
+    <div style="display:flex; gap:10px;">
+      <button class="btn-primary" style="flex:1;" onclick="abrirArmarCruces()">Armar cruces</button>
+      <button class="btn-primary" style="flex:1;" onclick="sortearCruces()">Sortear cruces</button>
+    </div>
+  </div>
+
+  <!-- PANTALLA ARMAR CRUCES (manual) -->
+  <div class="screen" id="screen-armar-cruces">
+    <button class="btn-volver" onclick="goTo('screen-cruces')">&larr; Volver</button>
+    <h3>Armar cruces</h3>
+    <p style="color:var(--gris);">Tocá dos parejas para formar un cruce. Cruces armados / pistas disponibles: <span id="pistasDisponiblesInfo"></span></p>
+
+    <div id="disponiblesCruces" class="chips"></div>
+
+    <label>Cruces armados</label>
+    <div id="listaCrucesArmados" style="display:flex; flex-direction:column; gap:6px;"></div>
+
+    <button class="btn-primary" onclick="confirmarCrucesManual()">Confirmar cruces</button>
+  </div>
+
+  <!-- PANTALLA SORTEO (parejas aleatorias) -->
   <div class="screen" id="screen-sorteo">
     <button class="btn-volver" onclick="goTo('screen-jornada')">&larr; Volver</button>
     <h3>Opciones de sorteo</h3>
@@ -266,7 +303,7 @@
       <div class="chip selected" data-valor="libre" onclick="seleccionarUnico(this)">Sin balancear</div>
     </div>
 
-    <button class="btn-primary" id="btnGenerarCruces" onclick="sortearParejas()">Generar cruces iniciales</button>
+    <button class="btn-primary" id="btnGenerarCruces" onclick="sortearParejasAleatorio()">Generar parejas</button>
   </div>
 
   <!-- PANTALLA UNIRSE A TORNEO -->
@@ -349,7 +386,7 @@
   const app = initializeApp(firebaseConfig);
   const db = getFirestore(app);
 
-  let valores = { frecuencia: 1, pistasHoy: 1 };
+  let valores = { frecuencia: 1, pistasHoy: 1, formatoSetHoy: '4' };
 
   function goTo(id) {
     document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
@@ -361,10 +398,12 @@
     if (nuevo < 1) nuevo = 1;
     if (nuevo > 7) nuevo = 7;
     valores[campo] = nuevo;
-    document.getElementById(campo).textContent = nuevo;
+    const el = document.getElementById(campo);
+    if (el) el.textContent = nuevo;
     if (campo === 'pistasHoy') {
       renderListaJornada();
       recalcularValidezSorteo();
+      guardarConfigAdmin();
     }
   }
 
@@ -431,6 +470,12 @@
 
   function fechaHoy() {
     return new Date().toISOString().slice(0, 10); // YYYY-MM-DD
+  }
+
+  function nombreDiaSemana(fechaStr) {
+    const dias = ['Domingo','Lunes','Martes','Miércoles','Jueves','Viernes','Sábado'];
+    const d = new Date(fechaStr + 'T00:00:00');
+    return dias[d.getDay()];
   }
 
   async function abrirMisTorneos() {
@@ -539,6 +584,8 @@
   let jugadoresHoyData = []; // confirmados + randoms para la jornada de hoy
   let sorteoExistente = null; // doc guardado en Firestore para hoy, o null
   let sorteoValido = false;
+  let adminDoc = null; // { propuestas, confirmado, pistasHoy, formatoSetHoy }
+  let adminHoy = null; // nombre del administrador confirmado de hoy, o null
 
   function mismosJugadores(a, b) {
     if (!a || !b || a.length !== b.length) return false;
@@ -565,20 +612,34 @@
     const sorteoSnap = await getDoc(doc(db, 'torneos', codigo, 'sorteos', fecha));
     sorteoExistente = sorteoSnap.exists() ? sorteoSnap.data() : null;
 
+    // Revisar administrador del día
+    const adminSnap = await getDoc(doc(db, 'torneos', codigo, 'admins', fecha));
+    adminDoc = adminSnap.exists() ? adminSnap.data() : { propuestas: {}, confirmado: null };
+    adminHoy = adminDoc.confirmado || null;
+
     if (sorteoExistente) {
       // Restaurar pistas/formato usados en el sorteo guardado
       valores.pistasHoy = sorteoExistente.pistas;
-      document.getElementById('pistasHoy').textContent = String(sorteoExistente.pistas);
-      document.getElementById('formatoSetHoy').value = sorteoExistente.formatoSet;
+      valores.formatoSetHoy = sorteoExistente.formatoSet;
+    } else if (adminDoc.pistasHoy) {
+      valores.pistasHoy = adminDoc.pistasHoy;
+      valores.formatoSetHoy = adminDoc.formatoSetHoy || '4';
     } else {
       valores.pistasHoy = 1;
-      document.getElementById('pistasHoy').textContent = '1';
-      document.getElementById('formatoSetHoy').value = '4';
+      valores.formatoSetHoy = '4';
     }
 
     renderListaJornada();
+    renderInfoHeaderEstatica();
     recalcularValidezSorteo();
     goTo('screen-jornada');
+  }
+
+  function renderInfoHeaderEstatica() {
+    document.getElementById('infoDia').textContent = nombreDiaSemana(fechaHoy());
+    document.getElementById('infoHora').textContent = 'Pendiente de configurar';
+    document.getElementById('infoClub').textContent = 'Pendiente de configurar';
+    document.getElementById('infoConfirmados').textContent = confirmadosData.length;
   }
 
   function recalcularValidezSorteo() {
@@ -589,6 +650,7 @@
       && valores.pistasHoy === sorteoExistente.pistas;
     renderBannerSorteo();
     actualizarVistaSorteo();
+    renderSeccionAdmin();
   }
 
   function renderBannerSorteo() {
@@ -598,54 +660,179 @@
       banner.innerHTML = `<p style="background:var(--verde-claro); color:var(--verde); padding:10px; border-radius:8px;">✅ El sorteo de hoy ya fue realizado por <strong>${sorteoExistente.autor}</strong>. Las parejas y cruces son definitivos.</p>`;
     } else if (sorteoExistente && sorteoExistente.invalidado) {
       const solicitante = sorteoExistente.cuestionamiento ? sorteoExistente.cuestionamiento.solicitante : '';
-      banner.innerHTML = `<p style="background:#fff3e0; color:var(--naranja); padding:10px; border-radius:8px;">⚠ El sorteo anterior (de <strong>${sorteoExistente.autor}</strong>) fue cuestionado por <strong>${solicitante}</strong> y el grupo aprobó repetirlo. Generá los cruces nuevamente.</p>`;
+      banner.innerHTML = `<p style="background:#fff3e0; color:var(--naranja); padding:10px; border-radius:8px;">⚠ El sorteo anterior (de <strong>${sorteoExistente.autor}</strong>) fue cuestionado por <strong>${solicitante}</strong> y el grupo aprobó repetirlo. El administrador debe generar las parejas y cruces nuevamente.</p>`;
     } else if (sorteoExistente) {
-      banner.innerHTML = `<p style="background:#fff3e0; color:var(--naranja); padding:10px; border-radius:8px;">⚠ El sorteo ya fue realizado por <strong>${sorteoExistente.autor}</strong>, pero la lista de jugadores cambió. Hay que generar los cruces nuevamente.</p>`;
+      banner.innerHTML = `<p style="background:#fff3e0; color:var(--naranja); padding:10px; border-radius:8px;">⚠ El sorteo ya fue realizado por <strong>${sorteoExistente.autor}</strong>, pero la lista de jugadores cambió. El administrador debe generar las parejas y cruces nuevamente.</p>`;
     } else {
       banner.innerHTML = '';
     }
   }
 
   function actualizarVistaSorteo() {
-    const pistasEditable = document.getElementById('pistasEditable');
-    const pistasFijo = document.getElementById('pistasFijo');
-    const formatoEditable = document.getElementById('formatoEditable');
-    const formatoFijo = document.getElementById('formatoFijo');
     const seccionCruces = document.getElementById('seccionCruces');
-    const btnSortear = document.getElementById('btnSortearParejas');
-    const btnRetirar = document.getElementById('btnRetirarInscripcion');
+
+    // Pistas y formato vigentes (del sorteo si es válido, o de la configuración actual)
+    const pistasMostrar = sorteoValido ? sorteoExistente.pistas : valores.pistasHoy;
+    const formatoMostrar = sorteoValido ? sorteoExistente.formatoSet : valores.formatoSetHoy;
+    document.getElementById('infoPistas').textContent = pistasMostrar;
+    document.getElementById('infoFormato').textContent = 'Sets a ' + formatoMostrar + ' games';
 
     if (sorteoValido) {
-      pistasEditable.style.display = 'none';
-      pistasFijo.style.display = 'block';
-      document.getElementById('pistasFijoValor').textContent = sorteoExistente.pistas;
-
-      formatoEditable.style.display = 'none';
-      formatoFijo.style.display = 'block';
-      document.getElementById('formatoFijoValor').textContent = 'Sets a ' + sorteoExistente.formatoSet + ' games';
-
       seccionCruces.style.display = 'flex';
       seccionCruces.style.flexDirection = 'column';
       seccionCruces.style.gap = '10px';
       renderCrucesGuardados();
       renderCuestionamiento();
-
-      btnSortear.style.display = 'none';
     } else {
-      pistasEditable.style.display = 'block';
-      pistasFijo.style.display = 'none';
-
-      formatoEditable.style.display = 'block';
-      formatoFijo.style.display = 'none';
-
       seccionCruces.style.display = 'none';
-
-      btnSortear.style.display = 'block';
     }
 
     const miNombre = localStorage.getItem('miNombre');
     const estoyConfirmado = confirmadosData.some(j => j.nombre === miNombre);
-    btnRetirar.style.display = estoyConfirmado ? 'block' : 'none';
+    document.getElementById('btnRetirarInscripcion').style.display = estoyConfirmado ? 'block' : 'none';
+  }
+
+  function renderSeccionAdmin() {
+    const cont = document.getElementById('seccionAdmin');
+    const miNombre = localStorage.getItem('miNombre');
+
+    if (!adminHoy) {
+      cont.innerHTML = `
+        <p style="color:var(--gris);">Todavía no se eligió administrador para hoy.</p>
+        <button class="btn-secondary" onclick="abrirElegirAdmin()">Elegir administrador del día</button>`;
+      return;
+    }
+
+    if (miNombre !== adminHoy || sorteoValido) {
+      cont.innerHTML = `<p style="background:var(--verde-claro); color:var(--verde); padding:10px; border-radius:8px;">👑 Administrador de hoy: <strong>${adminHoy}</strong></p>`;
+      return;
+    }
+
+    // Soy el administrador y todavía no hay sorteo válido: panel completo
+    cont.innerHTML = `
+      <p style="background:var(--verde-claro); color:var(--verde); padding:10px; border-radius:8px;">👑 Sos el administrador de hoy</p>
+
+      <label>Cantidad de pistas hoy</label>
+      <div class="stepper">
+        <button onclick="cambiarValor('pistasHoy', -1)">-</button>
+        <span id="pistasHoy">${valores.pistasHoy}</span>
+        <button onclick="cambiarValor('pistasHoy', 1)">+</button>
+      </div>
+
+      <label>Formato de set para hoy</label>
+      <select id="formatoSetHoy" onchange="onCambioFormato()">
+        <option value="3">Sets a 3 games</option>
+        <option value="4">Sets a 4 games</option>
+        <option value="5">Sets a 5 games</option>
+        <option value="6">Sets a 6 games</option>
+      </select>
+
+      <div style="display:flex; gap:10px;">
+        <button class="btn-primary" style="flex:1;" onclick="abrirArmarParejas()">Armar parejas</button>
+        <button class="btn-primary" style="flex:1;" onclick="irASorteo()">Sortear parejas</button>
+      </div>`;
+
+    document.getElementById('formatoSetHoy').value = valores.formatoSetHoy;
+  }
+
+  function onCambioFormato() {
+    valores.formatoSetHoy = document.getElementById('formatoSetHoy').value;
+    actualizarVistaSorteo();
+    guardarConfigAdmin();
+  }
+
+  async function guardarConfigAdmin() {
+    const miNombre = localStorage.getItem('miNombre');
+    if (!adminHoy || miNombre !== adminHoy) return;
+
+    const codigo = localStorage.getItem('torneoSeleccionado');
+    const fecha = fechaHoy();
+
+    try {
+      await setDoc(doc(db, 'torneos', codigo, 'admins', fecha), {
+        pistasHoy: valores.pistasHoy,
+        formatoSetHoy: valores.formatoSetHoy
+      }, { merge: true });
+    } catch (e) {
+      // No bloquea la interfaz si falla el guardado de config
+    }
+  }
+
+  // ---- ELEGIR ADMINISTRADOR DEL DÍA ----
+
+  function abrirElegirAdmin() {
+    renderElegirAdmin();
+    goTo('screen-elegir-admin');
+  }
+
+  function renderElegirAdmin() {
+    const cont = document.getElementById('listaCandidatosAdmin');
+    cont.innerHTML = '';
+
+    const propuestas = adminDoc.propuestas || {};
+    const miNombre = localStorage.getItem('miNombre');
+    const miPropuesta = propuestas[miNombre] || null;
+
+    confirmadosData.forEach(j => {
+      const div = document.createElement('div');
+      div.className = 'chip' + (miPropuesta === j.nombre ? ' selected' : '');
+      div.dataset.valor = j.nombre;
+      div.textContent = j.nombre;
+      div.onclick = () => seleccionarUnico(div);
+      cont.appendChild(div);
+    });
+
+    const estado = document.getElementById('estadoPropuestasAdmin');
+    if (miPropuesta) {
+      estado.innerHTML = `<p style="color:var(--gris);">Ya propusiste a <strong>${miPropuesta}</strong>. Si querés cambiar, elegí otro jugador y volvé a presionar "Proponer".</p>`;
+    } else {
+      estado.innerHTML = '';
+    }
+  }
+
+  async function proponerAdmin() {
+    const seleccionado = document.querySelector('#listaCandidatosAdmin .chip.selected');
+    if (!seleccionado) {
+      alert('Elegí un jugador para proponer como administrador.');
+      return;
+    }
+    const propuesto = seleccionado.dataset.valor;
+
+    const codigo = localStorage.getItem('torneoSeleccionado');
+    const fecha = fechaHoy();
+    const miNombre = localStorage.getItem('miNombre');
+
+    const propuestas = { ...(adminDoc.propuestas || {}) };
+    propuestas[miNombre] = propuesto;
+
+    const conteo = Object.values(propuestas).filter(p => p === propuesto).length;
+    const umbral = confirmadosData.length <= 2 ? 1 : 2;
+
+    let confirmado = adminDoc.confirmado || null;
+    if (!confirmado && conteo >= umbral) confirmado = propuesto;
+
+    try {
+      await setDoc(doc(db, 'torneos', codigo, 'admins', fecha), {
+        propuestas: propuestas,
+        confirmado: confirmado
+      }, { merge: true });
+    } catch (e) {
+      alert('No se pudo registrar la propuesta: ' + e.message);
+      return;
+    }
+
+    adminDoc.propuestas = propuestas;
+    adminDoc.confirmado = confirmado;
+    adminHoy = confirmado;
+
+    if (confirmado) {
+      alert(`¡${confirmado} fue confirmado como administrador de hoy!`);
+      renderSeccionAdmin();
+      goTo('screen-jornada');
+    } else {
+      alert(`Propusiste a ${propuesto}. Falta otra confirmación para que sea el administrador.`);
+      renderElegirAdmin();
+    }
   }
 
   function renderListaJornada() {
@@ -896,7 +1083,14 @@
     return copia;
   }
 
-  async function sortearParejas() {
+  // ---- ETAPA 1: ARMAR/SORTEAR PAREJAS ----
+
+  let parejasFormadas = []; // [[j1,j2], ...] resultado de la etapa 1
+  let descartadosParejas = []; // jugadores que quedaron sin pareja
+  let modoParejas = 'aleatorio'; // 'aleatorio' | 'manual'
+  let respetarLadoUsado = false;
+
+  async function sortearParejasAleatorio() {
     let jugadores = jugadoresHoyData.map(j => ({
       nombre: j.nombre,
       lado: j.lado,
@@ -941,34 +1135,208 @@
       }
     }
 
-    // Formar cruces (parejas enfrentadas, de 2 en 2)
-    parejas = mezclarArray(parejas);
+    parejasFormadas = parejas;
+    descartadosParejas = descartados;
+    modoParejas = 'aleatorio';
+    respetarLadoUsado = respetarLado;
+
+    irAEtapaCruces();
+  }
+
+  // ---- ARMAR PAREJAS (manual) ----
+
+  let seleccionTempPareja = null;
+  let parejasManualTemp = [];
+  let disponiblesParejasTemp = [];
+
+  function abrirArmarParejas() {
+    disponiblesParejasTemp = [...jugadoresHoyData];
+    parejasManualTemp = [];
+    seleccionTempPareja = null;
+    renderArmarParejas();
+    goTo('screen-armar-parejas');
+  }
+
+  function renderArmarParejas() {
+    const cont = document.getElementById('disponiblesParejas');
+    cont.innerHTML = '';
+    disponiblesParejasTemp.forEach(j => {
+      const div = document.createElement('div');
+      div.className = 'chip' + (seleccionTempPareja === j ? ' selected' : '');
+      div.textContent = j.esRandom ? `${j.nombre} 🎲` : j.nombre;
+      div.onclick = () => tocarJugadorParaPareja(j);
+      cont.appendChild(div);
+    });
+
+    const lista = document.getElementById('listaParejasArmadas');
+    if (parejasManualTemp.length === 0) {
+      lista.innerHTML = '<p style="color:var(--gris);">Todavía no armaste ninguna pareja.</p>';
+    } else {
+      lista.innerHTML = parejasManualTemp.map((p, i) =>
+        `<div class="chip selected" style="cursor:default; display:flex; justify-content:space-between; align-items:center;">
+          <span>${p[0].nombre} + ${p[1].nombre}</span>
+          <span style="cursor:pointer; color:var(--naranja); margin-left:10px;" onclick="deshacerParejaManual(${i})">✕</span>
+        </div>`
+      ).join('');
+    }
+  }
+
+  function tocarJugadorParaPareja(j) {
+    if (seleccionTempPareja === null) {
+      seleccionTempPareja = j;
+    } else if (seleccionTempPareja === j) {
+      seleccionTempPareja = null;
+    } else {
+      parejasManualTemp.push([seleccionTempPareja, j]);
+      disponiblesParejasTemp = disponiblesParejasTemp.filter(x => x !== seleccionTempPareja && x !== j);
+      seleccionTempPareja = null;
+    }
+    renderArmarParejas();
+  }
+
+  function deshacerParejaManual(i) {
+    const [a, b] = parejasManualTemp[i];
+    disponiblesParejasTemp.push(a, b);
+    parejasManualTemp.splice(i, 1);
+    renderArmarParejas();
+  }
+
+  function confirmarParejasManual() {
+    if (parejasManualTemp.length === 0) {
+      alert('Armá al menos una pareja.');
+      return;
+    }
+    parejasFormadas = parejasManualTemp.map(p => [...p]);
+    descartadosParejas = [...disponiblesParejasTemp];
+    modoParejas = 'manual';
+    respetarLadoUsado = false;
+
+    irAEtapaCruces();
+  }
+
+  // ---- ETAPA 2: ARMAR/SORTEAR CRUCES ----
+
+  function irAEtapaCruces() {
+    const cont = document.getElementById('listaParejasFormadas');
+    let html = parejasFormadas.map((p, i) =>
+      `<div class="chip selected" style="cursor:default;">Pareja ${i+1}: ${p[0].nombre} + ${p[1].nombre}</div>`
+    ).join('');
+    if (descartadosParejas.length > 0) {
+      html += `<p style="color:var(--gris);">Sin pareja: ${descartadosParejas.map(j=>j.nombre).join(', ')}</p>`;
+    }
+    cont.innerHTML = html;
+    goTo('screen-cruces');
+  }
+
+  async function sortearCruces() {
+    const parejas = mezclarArray(parejasFormadas);
     let cruces = [];
     for (let i = 0; i < parejas.length; i += 2) {
       if (parejas[i+1]) {
         cruces.push([parejas[i], parejas[i+1]]);
       } else {
-        cruces.push([parejas[i], null]); // pareja libre/descansa
+        cruces.push([parejas[i], null]);
       }
     }
 
-    // Limitar cruces simultáneos a la cantidad de pistas disponibles hoy
     const pistasHoy = valores.pistasHoy;
     let parejasLibres = [];
     if (cruces.length > pistasHoy) {
       const excedentes = cruces.splice(pistasHoy);
       excedentes.forEach(c => {
-        if (c[0]) parejasLibres.push(c[0]);
-        if (c[1]) parejasLibres.push(c[1]);
+        if (c[0]) parejasLibres.push(...c[0]);
+        if (c[1]) parejasLibres.push(...c[1]);
       });
     }
 
-    await guardarSorteo(cruces, descartados, parejasLibres, respetarLado, balancear);
+    await finalizarSorteo(cruces, parejasLibres, 'aleatorio');
+  }
 
+  // ---- ARMAR CRUCES (manual) ----
+
+  let seleccionTempCruce = null;
+  let crucesManualTemp = [];
+  let disponiblesCrucesTemp = [];
+
+  function abrirArmarCruces() {
+    disponiblesCrucesTemp = [...parejasFormadas];
+    crucesManualTemp = [];
+    seleccionTempCruce = null;
+    renderArmarCruces();
+    goTo('screen-armar-cruces');
+  }
+
+  function renderArmarCruces() {
+    document.getElementById('pistasDisponiblesInfo').textContent =
+      `${crucesManualTemp.length} / ${valores.pistasHoy}`;
+
+    const cont = document.getElementById('disponiblesCruces');
+    cont.innerHTML = '';
+    disponiblesCrucesTemp.forEach(p => {
+      const div = document.createElement('div');
+      div.className = 'chip' + (seleccionTempCruce === p ? ' selected' : '');
+      div.textContent = `${p[0].nombre} + ${p[1].nombre}`;
+      div.onclick = () => tocarParejaParaCruce(p);
+      cont.appendChild(div);
+    });
+
+    const lista = document.getElementById('listaCrucesArmados');
+    if (crucesManualTemp.length === 0) {
+      lista.innerHTML = '<p style="color:var(--gris);">Todavía no armaste ningún cruce.</p>';
+    } else {
+      lista.innerHTML = crucesManualTemp.map((c, i) => {
+        const p1 = `${c[0][0].nombre} + ${c[0][1].nombre}`;
+        const p2 = c[1] ? `${c[1][0].nombre} + ${c[1][1].nombre}` : 'Descansa';
+        return `<div class="chip selected" style="cursor:default; display:flex; justify-content:space-between; align-items:center;">
+          <span>Cruce ${i+1}: ${p1} vs ${p2}</span>
+          <span style="cursor:pointer; color:var(--naranja); margin-left:10px;" onclick="deshacerCruceManual(${i})">✕</span>
+        </div>`;
+      }).join('');
+    }
+  }
+
+  function tocarParejaParaCruce(p) {
+    if (crucesManualTemp.length >= valores.pistasHoy) {
+      alert(`Ya armaste ${valores.pistasHoy} cruce(s), el máximo según las pistas de hoy.`);
+      return;
+    }
+    if (seleccionTempCruce === null) {
+      seleccionTempCruce = p;
+    } else if (seleccionTempCruce === p) {
+      seleccionTempCruce = null;
+    } else {
+      crucesManualTemp.push([seleccionTempCruce, p]);
+      disponiblesCrucesTemp = disponiblesCrucesTemp.filter(x => x !== seleccionTempCruce && x !== p);
+      seleccionTempCruce = null;
+    }
+    renderArmarCruces();
+  }
+
+  function deshacerCruceManual(i) {
+    const [a, b] = crucesManualTemp[i];
+    disponiblesCrucesTemp.push(a);
+    if (b) disponiblesCrucesTemp.push(b);
+    crucesManualTemp.splice(i, 1);
+    renderArmarCruces();
+  }
+
+  async function confirmarCrucesManual() {
+    if (crucesManualTemp.length === 0) {
+      alert('Armá al menos un cruce.');
+      return;
+    }
+    let parejasLibres = [];
+    disponiblesCrucesTemp.forEach(p => parejasLibres.push(...p));
+
+    await finalizarSorteo(crucesManualTemp, parejasLibres, 'manual');
+  }
+
+  async function finalizarSorteo(cruces, parejasLibres, modoCruces) {
+    await guardarSorteo(cruces, descartadosParejas, parejasLibres, respetarLadoUsado, modoParejas, modoCruces);
     goTo('screen-jornada');
   }
 
-  async function guardarSorteo(cruces, descartados, parejasLibres, respetarLado, balancear) {
+  async function guardarSorteo(cruces, descartados, parejasLibres, respetarLado, modoParejas, modoCruces) {
     const codigo = localStorage.getItem('torneoSeleccionado');
     const fecha = fechaHoy();
     const miNombre = localStorage.getItem('miNombre');
@@ -978,9 +1346,10 @@
       fechaHora: new Date().toISOString(),
       confirmadosEnSorteo: confirmadosData.map(j => j.nombre),
       pistas: valores.pistasHoy,
-      formatoSet: document.getElementById('formatoSetHoy').value,
+      formatoSet: valores.formatoSetHoy,
       respetarLado: respetarLado,
-      balancear: balancear,
+      modoParejas: modoParejas,
+      modoCruces: modoCruces,
       cruces: cruces.map(([p1, p2]) => ({ pareja1: p1, pareja2: p2 || null })),
       descartados: descartados,
       parejasLibres: parejasLibres,
@@ -1242,7 +1611,6 @@
   window.abrirMisTorneos = abrirMisTorneos;
   window.abrirVerTorneo = abrirVerTorneo;
   window.irASorteo = irASorteo;
-  window.sortearParejas = sortearParejas;
   window.abrirUnirse = abrirUnirse;
   window.buscarTorneo = buscarTorneo;
   window.confirmarIngreso = confirmarIngreso;
@@ -1255,6 +1623,17 @@
   window.compartirCruces = compartirCruces;
   window.cuestionarSorteo = cuestionarSorteo;
   window.votarCuestionamiento = votarCuestionamiento;
+  window.abrirElegirAdmin = abrirElegirAdmin;
+  window.proponerAdmin = proponerAdmin;
+  window.onCambioFormato = onCambioFormato;
+  window.abrirArmarParejas = abrirArmarParejas;
+  window.deshacerParejaManual = deshacerParejaManual;
+  window.confirmarParejasManual = confirmarParejasManual;
+  window.sortearParejasAleatorio = sortearParejasAleatorio;
+  window.abrirArmarCruces = abrirArmarCruces;
+  window.deshacerCruceManual = deshacerCruceManual;
+  window.confirmarCrucesManual = confirmarCrucesManual;
+  window.sortearCruces = sortearCruces;
 </script>
 </body>
 </html>
