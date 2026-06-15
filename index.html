@@ -166,7 +166,7 @@
 
     <label style="display:flex; align-items:center; gap:8px; cursor:pointer;">
       <input type="checkbox" id="torneoPrivado" style="width:20px; height:20px;">
-      Torneo privado (seré siempre el administrador, salvo que elija un reemplazo)
+      Torneo privado (Serás siempre el Administrador, salvo que elijas un reemplazo)
     </label>
 
     <button class="btn-primary" onclick="crearTorneo()">Crear torneo</button>
@@ -208,6 +208,7 @@
     <div id="listaConfirmados" style="display:flex; flex-direction:column; gap:6px;"></div>
 
     <button class="btn-primary" id="btnConfirmarAsistencia" onclick="confirmarAsistencia()">Confirmar asistencia</button>
+    <button class="btn-secondary" id="btnRetirarAsistencia" onclick="retirarInscripcion()" style="display:none;">Retirar asistencia</button>
 
     <label>Jugadores frecuentes no confirmados</label>
     <div id="listaNoConfirmados" style="display:flex; flex-direction:column; gap:6px;"></div>
@@ -269,6 +270,7 @@
       <label>Parejas y cruces iniciales</label>
       <div id="crucesGuardadosView"></div>
       <button class="btn-secondary" onclick="compartirCruces()">Compartir cruces</button>
+      <button class="btn-primary" onclick="abrirResultados()">Anotar resultados</button>
 
       <div id="seccionCuestionamiento"></div>
     </div>
@@ -331,6 +333,15 @@
     <div id="listaCrucesArmados" style="display:flex; flex-direction:column; gap:6px;"></div>
 
     <button class="btn-primary" onclick="confirmarCrucesManual()">Confirmar cruces</button>
+  </div>
+
+  <!-- PANTALLA ANOTAR RESULTADOS -->
+  <div class="screen" id="screen-resultados">
+    <button class="btn-volver" onclick="goTo('screen-jornada')">&larr; Volver</button>
+    <h3>Resultados de hoy</h3>
+    <p style="color:var(--gris); margin-top:-10px;">Formato: sets a <span id="formatoResultados"></span> games</p>
+
+    <div id="listaResultados" style="display:flex; flex-direction:column; gap:14px;"></div>
   </div>
 
   <!-- PANTALLA SORTEO (parejas aleatorias) -->
@@ -638,12 +649,15 @@
 
     const miNombre = localStorage.getItem('miNombre');
     const btn = document.getElementById('btnConfirmarAsistencia');
+    const btnRetirar = document.getElementById('btnRetirarAsistencia');
     if (confirmados.includes(miNombre)) {
       btn.textContent = 'Ya confirmaste tu asistencia ✓';
       btn.disabled = true;
+      btnRetirar.style.display = 'block';
     } else {
       btn.textContent = 'Confirmar asistencia';
       btn.disabled = false;
+      btnRetirar.style.display = 'none';
     }
 
     document.getElementById('btnVerTorneo').style.display = 'block';
@@ -685,61 +699,65 @@
     const codigo = localStorage.getItem('torneoSeleccionado');
     const fecha = fechaHoy();
 
-    if (!torneoInfo || torneoInfo.codigo !== codigo) {
-      const torneoSnap = await getDoc(doc(db, 'torneos', codigo));
-      torneoInfo = torneoSnap.exists() ? torneoSnap.data() : null;
-    }
+    try {
+      if (!torneoInfo || torneoInfo.codigo !== codigo) {
+        const torneoSnap = await getDoc(doc(db, 'torneos', codigo));
+        torneoInfo = torneoSnap.exists() ? torneoSnap.data() : null;
+      }
 
-    const asistSnap = await getDoc(doc(db, 'torneos', codigo, 'asistencias', fecha));
-    const confirmados = asistSnap.exists() ? asistSnap.data().confirmados : [];
+      const asistSnap = await getDoc(doc(db, 'torneos', codigo, 'asistencias', fecha));
+      const confirmados = asistSnap.exists() ? asistSnap.data().confirmados : [];
 
-    confirmadosData = [];
-    for (const nombre of confirmados) {
-      const perfilSnap = await getDoc(doc(db, 'jugadores', nombre));
-      const j = perfilSnap.data();
-      confirmadosData.push({ nombre: j.nombre, lado: j.lado, categoria: j.categoria, esRandom: false });
-    }
+      confirmadosData = [];
+      for (const nombre of confirmados) {
+        const perfilSnap = await getDoc(doc(db, 'jugadores', nombre));
+        const j = perfilSnap.data();
+        confirmadosData.push({ nombre: j.nombre, lado: j.lado, categoria: j.categoria, esRandom: false });
+      }
 
-    // Revisar si ya existe un sorteo guardado para hoy
-    const sorteoSnap = await getDoc(doc(db, 'torneos', codigo, 'sorteos', fecha));
-    sorteoExistente = sorteoSnap.exists() ? sorteoSnap.data() : null;
+      // Revisar si ya existe un sorteo guardado para hoy
+      const sorteoSnap = await getDoc(doc(db, 'torneos', codigo, 'sorteos', fecha));
+      sorteoExistente = sorteoSnap.exists() ? sorteoSnap.data() : null;
 
-    // Revisar administrador del día
-    const adminSnap = await getDoc(doc(db, 'torneos', codigo, 'admins', fecha));
-    adminDoc = adminSnap.exists() ? adminSnap.data() : { propuestas: {}, confirmado: null };
-    adminHoy = adminDoc.confirmado || null;
+      // Revisar administrador del día
+      const adminSnap = await getDoc(doc(db, 'torneos', codigo, 'admins', fecha));
+      adminDoc = adminSnap.exists() ? adminSnap.data() : { propuestas: {}, confirmado: null };
+      adminHoy = adminDoc.confirmado || null;
 
-    // Torneo privado: el creador es admin por defecto si está confirmado y no hay admin definido
-    const creador = torneoInfo ? (torneoInfo.creador || (torneoInfo.jugadores && torneoInfo.jugadores[0])) : null;
-    if (!adminHoy && torneoInfo && torneoInfo.privado && creador) {
-      const creadorConfirmado = confirmadosData.some(j => j.nombre === creador);
-      if (creadorConfirmado) {
-        adminHoy = creador;
-        adminDoc.confirmado = creador;
-        try {
-          await setDoc(doc(db, 'torneos', codigo, 'admins', fecha), { confirmado: creador }, { merge: true });
-        } catch (e) {
-          // si falla, igual seguimos mostrando al creador como admin localmente
+      // Torneo privado: el creador es admin por defecto si está confirmado y no hay admin definido
+      const creador = torneoInfo ? (torneoInfo.creador || (torneoInfo.jugadores && torneoInfo.jugadores[0])) : null;
+      if (!adminHoy && torneoInfo && torneoInfo.privado && creador) {
+        const creadorConfirmado = confirmadosData.some(j => j.nombre === creador);
+        if (creadorConfirmado) {
+          adminHoy = creador;
+          adminDoc.confirmado = creador;
+          try {
+            await setDoc(doc(db, 'torneos', codigo, 'admins', fecha), { confirmado: creador }, { merge: true });
+          } catch (e) {
+            // si falla, igual seguimos mostrando al creador como admin localmente
+          }
         }
       }
-    }
 
-    if (sorteoExistente) {
-      // Restaurar pistas/formato usados en el sorteo guardado
-      valores.pistasHoy = sorteoExistente.pistas;
-      valores.formatoSetHoy = sorteoExistente.formatoSet;
-    } else if (adminDoc.pistasHoy) {
-      valores.pistasHoy = adminDoc.pistasHoy;
-      valores.formatoSetHoy = adminDoc.formatoSetHoy || '4';
-    } else {
-      valores.pistasHoy = 1;
-      valores.formatoSetHoy = '4';
-    }
+      if (sorteoExistente) {
+        // Restaurar pistas/formato usados en el sorteo guardado
+        valores.pistasHoy = sorteoExistente.pistas;
+        valores.formatoSetHoy = sorteoExistente.formatoSet;
+      } else if (adminDoc.pistasHoy) {
+        valores.pistasHoy = adminDoc.pistasHoy;
+        valores.formatoSetHoy = adminDoc.formatoSetHoy || '4';
+      } else {
+        valores.pistasHoy = 1;
+        valores.formatoSetHoy = '4';
+      }
 
-    renderListaJornada();
-    renderInfoHeaderEstatica();
-    recalcularValidezSorteo();
-    goTo('screen-jornada');
+      renderListaJornada();
+      renderInfoHeaderEstatica();
+      recalcularValidezSorteo();
+      goTo('screen-jornada');
+    } catch (e) {
+      alert('No se pudo abrir "Ver torneo": ' + e.message);
+    }
   }
 
   function renderInfoHeaderEstatica() {
@@ -1009,13 +1027,25 @@
     const fecha = fechaHoy();
     const ref = doc(db, 'torneos', codigo, 'asistencias', fecha);
 
+    // Estado fresco del sorteo y admin de hoy (puede llamarse sin haber entrado a "Ver torneo")
+    const sorteoSnap = await getDoc(doc(db, 'torneos', codigo, 'sorteos', fecha));
+    const sorteoActual = sorteoSnap.exists() ? sorteoSnap.data() : null;
+
+    const adminSnap = await getDoc(doc(db, 'torneos', codigo, 'admins', fecha));
+    const adminActual = adminSnap.exists() ? adminSnap.data() : { propuestas: {}, confirmado: null };
+    const adminActualNombre = adminActual.confirmado || null;
+
     let mensaje = '¿Confirmás que querés retirar tu inscripción para hoy?';
-    if (sorteoExistente) {
-      mensaje = `El sorteo de hoy ya fue realizado por ${sorteoExistente.autor}. Si retirás tu inscripción, será necesario generar los cruces nuevamente (a menos que vuelvas a inscribirte antes de que eso ocurra). ¿Confirmás que querés retirarte?`;
+    if (sorteoActual) {
+      mensaje = `El sorteo de hoy ya fue realizado por ${sorteoActual.autor}. Si retirás tu inscripción, será necesario generar los cruces nuevamente (a menos que vuelvas a inscribirte antes de que eso ocurra). ¿Confirmás que querés retirarte?`;
     }
     if (!confirm(mensaje)) return;
 
     await setDoc(ref, { confirmados: arrayRemove(miNombre) }, { merge: true });
+
+    sorteoExistente = sorteoActual;
+    adminDoc = adminActual;
+    adminHoy = adminActualNombre;
 
     // Si quien se retira era el administrador de hoy, el cargo queda vacante
     if (adminHoy === miNombre) {
@@ -1554,6 +1584,133 @@
     window.open(url, '_blank');
   }
 
+  // ---- ANOTAR RESULTADOS ----
+
+  const VEINTICUATRO_HS_MS = 24 * 60 * 60 * 1000;
+
+  function abrirResultados() {
+    document.getElementById('formatoResultados').textContent = sorteoExistente.formatoSet;
+    renderListaResultados();
+    goTo('screen-resultados');
+  }
+
+  function nombrePareja(pareja) {
+    return `${pareja[0].nombre} + ${pareja[1].nombre}`;
+  }
+
+  function renderListaResultados() {
+    const cont = document.getElementById('listaResultados');
+    const miNombre = localStorage.getItem('miNombre');
+    const cruces = sorteoExistente.cruces;
+
+    cont.innerHTML = cruces.map((c, i) => {
+      const nombre1 = nombrePareja(c.pareja1);
+      const nombre2 = c.pareja2 ? nombrePareja(c.pareja2) : null;
+
+      if (!nombre2) {
+        return `<div style="border:1px solid #ddd; border-radius:8px; padding:10px;">
+          <strong>Cruce N° ${i+1}</strong><br>${nombre1}<br><em>Descansa esta ronda, sin resultado</em>
+        </div>`;
+      }
+
+      const r = c.resultado || { estado: 'pendiente' };
+      const firme24h = r.estado === 'cargado' && r.fechaCarga
+        && (Date.now() - new Date(r.fechaCarga).getTime() > VEINTICUATRO_HS_MS);
+
+      let estadoHtml = '';
+
+      if (r.estado === 'confirmado' || firme24h) {
+        const confirmadoPor = r.estado === 'confirmado' ? r.confirmadoPor : 'firme automáticamente (24hs)';
+        estadoHtml = `<p style="color:var(--verde); font-weight:bold;">✅ ${r.gamesPareja1} - ${r.gamesPareja2}</p>
+          <p style="color:var(--gris); margin-top:-8px;">Cargado por ${r.cargadoPor}. Confirmado por ${confirmadoPor}.</p>`;
+      } else if (r.estado === 'cargado') {
+        estadoHtml = `<p style="font-weight:bold;">Resultado cargado: ${r.gamesPareja1} - ${r.gamesPareja2}</p>
+          <p style="color:var(--gris); margin-top:-8px;">Cargado por ${r.cargadoPor}.</p>`;
+        if (miNombre === r.cargadoPor) {
+          estadoHtml += `<p style="color:var(--gris);">Esperando que otro jugador lo confirme (o queda firme en 24hs).</p>
+            <button class="btn-secondary" onclick="corregirResultado(${i})">Corregir</button>`;
+        } else {
+          estadoHtml += `<div style="display:flex; gap:10px;">
+            <button class="btn-primary" style="flex:1;" onclick="confirmarResultado(${i})">Correcto</button>
+            <button class="btn-secondary" style="flex:1;" onclick="corregirResultado(${i})">Equivocado</button>
+          </div>`;
+        }
+      } else {
+        estadoHtml = `
+          <div style="display:flex; gap:10px; align-items:center; margin:6px 0;">
+            <input type="number" min="0" id="games1_${i}" style="width:70px; text-align:center;">
+            <span style="font-weight:bold;">-</span>
+            <input type="number" min="0" id="games2_${i}" style="width:70px; text-align:center;">
+          </div>
+          <button class="btn-primary" onclick="cargarResultado(${i})">Cargar resultado</button>`;
+      }
+
+      return `<div style="border:1px solid #ddd; border-radius:8px; padding:10px;">
+        <strong>Cruce N° ${i+1}</strong><br>
+        ${nombre1}<br>
+        <span style="color:var(--naranja); font-weight:bold;">vs</span><br>
+        ${nombre2}
+        ${estadoHtml}
+      </div>`;
+    }).join('');
+  }
+
+  async function guardarCruces() {
+    const codigo = localStorage.getItem('torneoSeleccionado');
+    const fecha = fechaHoy();
+    try {
+      await setDoc(doc(db, 'torneos', codigo, 'sorteos', fecha), { cruces: sorteoExistente.cruces }, { merge: true });
+    } catch (e) {
+      alert('No se pudo guardar el resultado: ' + e.message);
+      return false;
+    }
+    return true;
+  }
+
+  async function cargarResultado(i) {
+    const g1 = parseInt(document.getElementById(`games1_${i}`).value, 10);
+    const g2 = parseInt(document.getElementById(`games2_${i}`).value, 10);
+    if (isNaN(g1) || isNaN(g2) || g1 < 0 || g2 < 0) {
+      alert('Ingresá un resultado válido para ambas parejas.');
+      return;
+    }
+    const miNombre = localStorage.getItem('miNombre');
+
+    sorteoExistente.cruces[i].resultado = {
+      gamesPareja1: g1,
+      gamesPareja2: g2,
+      cargadoPor: miNombre,
+      fechaCarga: new Date().toISOString(),
+      confirmadoPor: null,
+      estado: 'cargado'
+    };
+
+    if (await guardarCruces()) renderListaResultados();
+  }
+
+  async function confirmarResultado(i) {
+    const miNombre = localStorage.getItem('miNombre');
+    sorteoExistente.cruces[i].resultado.confirmadoPor = miNombre;
+    sorteoExistente.cruces[i].resultado.estado = 'confirmado';
+
+    if (await guardarCruces()) renderListaResultados();
+  }
+
+  async function corregirResultado(i) {
+    if (!confirm('¿Marcar este resultado como equivocado y volver a cargarlo?')) return;
+
+    sorteoExistente.cruces[i].resultado = {
+      gamesPareja1: null,
+      gamesPareja2: null,
+      cargadoPor: null,
+      fechaCarga: null,
+      confirmadoPor: null,
+      estado: 'pendiente'
+    };
+
+    if (await guardarCruces()) renderListaResultados();
+  }
+
   function formatearPareja(pareja, respetarLado) {
     const [j1, j2] = pareja;
     let texto = `${j1.nombre} (${j1.categoria}, ${j1.lado}) + ${j2.nombre} (${j2.categoria}, ${j2.lado})`;
@@ -1787,6 +1944,10 @@
   window.deshacerCruceManual = deshacerCruceManual;
   window.confirmarCrucesManual = confirmarCrucesManual;
   window.sortearCruces = sortearCruces;
+  window.abrirResultados = abrirResultados;
+  window.cargarResultado = cargarResultado;
+  window.confirmarResultado = confirmarResultado;
+  window.corregirResultado = corregirResultado;
 </script>
 </body>
 </html>
