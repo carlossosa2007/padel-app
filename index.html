@@ -124,6 +124,11 @@
     background: var(--verde);
     color: white;
   }
+  .chip-random {
+    border: 1px solid var(--naranja);
+    background: #fff3e0;
+    color: var(--naranja);
+  }
 </style>
 </head>
 <body>
@@ -153,7 +158,7 @@
       <button onclick="cambiarValor('frecuencia', 1)">+</button>
     </div>
 
-    <label>Días más frecuentes de juego</label>
+    <label>Día más frecuente de juego</label>
     <div class="chips" id="diasJuego">
       <div class="chip" onclick="toggleChip(this)">Lunes</div>
       <div class="chip" onclick="toggleChip(this)">Martes</div>
@@ -202,11 +207,13 @@
 
   <!-- PANTALLA DETALLE DE TORNEO -->
   <div class="screen" id="screen-detalle-torneo">
-    <button class="btn-volver" onclick="goTo('screen-mistorneos')">&larr; Volver</button>
+    <button class="btn-volver" onclick="volverAMisTorneos()">&larr; Volver</button>
     <h3 id="tituloDetalleTorneo"></h3>
 
+    <div id="bannerNuevoMiembro"></div>
+
     <div style="background:var(--fondo); border-radius:8px; padding:10px; display:flex; flex-direction:column; gap:4px;">
-      <p style="margin:0;"><strong>Días más frecuentes de juego:</strong> <span id="detalleDias"></span></p>
+      <p style="margin:0;"><strong>Día más frecuente de juego:</strong> <span id="detalleDias"></span></p>
       <p style="margin:0;"><strong>Hora de juego:</strong> <span id="detalleHora"></span></p>
       <p style="margin:0;"><strong>Club:</strong> <span id="detalleClub"></span></p>
     </div>
@@ -230,7 +237,7 @@
     <button class="btn-volver" onclick="goTo('screen-detalle-torneo')">&larr; Volver</button>
     <h3>Editar información del torneo</h3>
 
-    <label>Días más frecuentes de juego</label>
+    <label>Día más frecuente de juego</label>
     <div class="chips" id="diasEditar">
       <div class="chip" onclick="toggleChip(this)">Lunes</div>
       <div class="chip" onclick="toggleChip(this)">Martes</div>
@@ -263,15 +270,15 @@
 
     <!-- Info de la jornada -->
     <div style="background:var(--fondo); border-radius:8px; padding:10px; display:flex; flex-direction:column; gap:4px;">
-      <p style="margin:0;"><strong>Días más frecuentes de juego:</strong> <span id="infoDias"></span></p>
+      <p style="margin:0;"><strong>Día más frecuente de juego:</strong> <span id="infoDias"></span></p>
       <p style="margin:0;"><strong>Hora de juego:</strong> <span id="infoHora"></span></p>
       <p style="margin:0;"><strong>Club:</strong> <span id="infoClub"></span></p>
       <p style="margin:0; display:none;" id="filaInfoPistas"><strong>Cantidad de pistas para hoy:</strong> <span id="infoPistas"></span></p>
       <p style="margin:0; display:none;" id="filaInfoFormato"><strong>Formato de set para hoy:</strong> <span id="infoFormato"></span></p>
-      <p style="margin:0;"><strong>Jugadores frecuentes confirmados:</strong> <span id="infoConfirmados"></span></p>
+      <p style="margin:0;"><strong>Jugadores confirmados:</strong> <span id="infoConfirmados"></span></p>
     </div>
 
-    <h3>Jugadores frecuentes confirmados</h3>
+    <h3>Jugadores confirmados</h3>
     <p style="color:var(--gris); margin-top:-10px;">Tocá un jugador para ver sus estadísticas</p>
 
     <div id="listaJornada" class="chips"></div>
@@ -361,6 +368,8 @@
     <p style="color:var(--gris); margin-top:-10px;">Formato: sets a <span id="formatoResultados"></span> games</p>
 
     <div id="listaResultados" style="display:flex; flex-direction:column; gap:14px;"></div>
+
+    <div id="armadorProximaRonda" style="display:none; flex-direction:column; gap:8px;"></div>
   </div>
 
   <!-- PANTALLA SORTEO (parejas aleatorias) -->
@@ -636,16 +645,40 @@
 
   async function abrirDetalleTorneo(codigo) {
     desuscribirJornada();
+    desuscribirTorneoMiembros();
     localStorage.setItem('torneoSeleccionado', codigo);
 
     const torneoSnap = await getDoc(doc(db, 'torneos', codigo));
     const torneo = torneoSnap.data();
     torneoInfo = torneo;
     document.getElementById('tituloDetalleTorneo').textContent = tituloTorneoTexto();
+    document.getElementById('bannerNuevoMiembro').innerHTML = '';
     renderDetalleInfo();
     torneoJugadores = torneo.jugadores || [];
 
     await renderConfirmados(codigo);
+
+    unsubTorneoMiembros = onSnapshot(doc(db, 'torneos', codigo), (snap) => {
+      if (!snap.exists()) return;
+      const datos = snap.data();
+      const jugadoresNuevos = datos.jugadores || [];
+      const agregados = jugadoresNuevos.filter(n => !torneoJugadores.includes(n));
+
+      torneoInfo = datos;
+      torneoJugadores = jugadoresNuevos;
+      renderDetalleInfo();
+      renderConfirmados(codigo);
+
+      if (agregados.length > 0) {
+        const texto = agregados.length === 1
+          ? `🎉 ${agregados[0]} se unió al torneo`
+          : `🎉 Se unieron: ${agregados.join(', ')}`;
+        const banner = document.getElementById('bannerNuevoMiembro');
+        banner.innerHTML = `<p style="background:var(--verde-claro); color:var(--verde); padding:10px; border-radius:8px;">${texto}</p>`;
+        setTimeout(() => { banner.innerHTML = ''; }, 6000);
+      }
+    });
+
     goTo('screen-detalle-torneo');
   }
 
@@ -768,6 +801,17 @@
     goTo('screen-detalle-torneo');
   }
 
+  let unsubTorneoMiembros = null;
+
+  function desuscribirTorneoMiembros() {
+    if (unsubTorneoMiembros) { unsubTorneoMiembros(); unsubTorneoMiembros = null; }
+  }
+
+  function volverAMisTorneos() {
+    desuscribirTorneoMiembros();
+    goTo('screen-mistorneos');
+  }
+
   async function actualizarConfirmadosData(confirmados) {
     const nombresActuales = confirmadosData.map(j => j.nombre);
     // Quitar a quienes ya no están confirmados
@@ -808,6 +852,7 @@
     unsubAdmin = onSnapshot(doc(db, 'torneos', codigo, 'admins', fecha), (snap) => {
       adminDoc = snap.exists() ? snap.data() : { propuestas: {}, confirmado: null };
       adminHoy = adminDoc.confirmado || null;
+      renderListaJornada();
       recalcularValidezSorteo();
 
       if (document.getElementById('screen-elegir-admin').classList.contains('active')) {
@@ -1143,21 +1188,51 @@
     const necesarios = valores.pistasHoy * 4;
     const faltan = Math.max(0, necesarios - confirmadosData.length);
 
+    const nombresRandom = (adminDoc && adminDoc.nombresRandom) ? adminDoc.nombresRandom : {};
+
     jugadoresHoyData = [...confirmadosData];
     for (let i = 1; i <= faltan; i++) {
-      jugadoresHoyData.push({ nombre: `Random ${i}`, lado: 'Ambos', categoria: '8va', esRandom: true });
+      const clave = `Random ${i}`;
+      const apodo = nombresRandom[clave];
+      const nombre = apodo ? `${clave} - ${apodo}` : clave;
+      jugadoresHoyData.push({ nombre: nombre, claveRandom: clave, lado: 'Ambos', categoria: '8va', esRandom: true });
     }
 
     jugadoresHoyData.forEach(j => {
       const div = document.createElement('div');
-      div.className = 'chip selected';
+      div.className = j.esRandom ? 'chip chip-random' : 'chip selected';
       div.dataset.nombre = j.nombre;
       div.dataset.lado = j.lado;
       div.dataset.categoria = j.categoria;
       div.textContent = j.esRandom ? `${j.nombre} 🎲` : j.nombre;
-      div.onclick = () => verEstadisticasJugador(j);
+      div.onclick = j.esRandom ? () => renombrarRandom(j.claveRandom) : () => verEstadisticasJugador(j);
       lista.appendChild(div);
     });
+  }
+
+  async function renombrarRandom(clave) {
+    const nombresRandom = { ...((adminDoc && adminDoc.nombresRandom) || {}) };
+    const actual = nombresRandom[clave] || '';
+    const nuevo = prompt(`Ponerle nombre a "${clave}" (dejar vacío para quitarlo):`, actual);
+    if (nuevo === null) return; // cancelado
+
+    if (nuevo.trim()) {
+      nombresRandom[clave] = nuevo.trim();
+    } else {
+      delete nombresRandom[clave];
+    }
+
+    const codigo = localStorage.getItem('torneoSeleccionado');
+    const fecha = fechaHoy();
+    try {
+      await setDoc(doc(db, 'torneos', codigo, 'admins', fecha), { nombresRandom }, { merge: true });
+    } catch (e) {
+      alert('No se pudo guardar el nombre: ' + e.message);
+      return;
+    }
+
+    adminDoc.nombresRandom = nombresRandom;
+    renderListaJornada();
   }
 
   function verEstadisticasJugador(j) {
@@ -1738,6 +1813,7 @@
 
   function abrirResultados() {
     document.getElementById('formatoResultados').textContent = sorteoExistente.formatoSet;
+    armadorProximaRondaActivo = false;
     renderListaResultados();
     goTo('screen-resultados');
   }
@@ -1746,68 +1822,168 @@
     return `${pareja[0].nombre} + ${pareja[1].nombre}`;
   }
 
-  function renderListaResultados() {
-    const cont = document.getElementById('listaResultados');
-    const miNombre = localStorage.getItem('miNombre');
-    const cruces = sorteoExistente.cruces;
-
-    cont.innerHTML = cruces.map((c, i) => {
-      const nombre1 = nombrePareja(c.pareja1);
-      const nombre2 = c.pareja2 ? nombrePareja(c.pareja2) : null;
-
-      if (!nombre2) {
-        return `<div style="border:1px solid #ddd; border-radius:8px; padding:10px;">
-          <strong>Cruce N° ${i+1}</strong><br>${nombre1}<br><em>Descansa esta ronda, sin resultado</em>
-        </div>`;
-      }
-
-      const r = c.resultado || { estado: 'pendiente' };
-      const firme24h = r.estado === 'cargado' && r.fechaCarga
-        && (Date.now() - new Date(r.fechaCarga).getTime() > VEINTICUATRO_HS_MS);
-
-      let estadoHtml = '';
-
-      if (r.estado === 'confirmado' || firme24h) {
-        const confirmadoPor = r.estado === 'confirmado' ? r.confirmadoPor : 'firme automáticamente (24hs)';
-        estadoHtml = `<p style="color:var(--verde); font-weight:bold;">✅ ${r.gamesPareja1} - ${r.gamesPareja2}</p>
-          <p style="color:var(--gris); margin-top:-8px;">Cargado por ${r.cargadoPor}. Confirmado por ${confirmadoPor}.</p>`;
-      } else if (r.estado === 'cargado') {
-        estadoHtml = `<p style="font-weight:bold;">Resultado cargado: ${r.gamesPareja1} - ${r.gamesPareja2}</p>
-          <p style="color:var(--gris); margin-top:-8px;">Cargado por ${r.cargadoPor}.</p>`;
-        if (miNombre === r.cargadoPor) {
-          estadoHtml += `<p style="color:var(--gris);">Esperando que otro jugador lo confirme (o queda firme en 24hs).</p>
-            <button class="btn-secondary" onclick="corregirResultado(${i})">Corregir</button>`;
-        } else {
-          estadoHtml += `<div style="display:flex; gap:10px;">
-            <button class="btn-primary" style="flex:1;" onclick="confirmarResultado(${i})">Correcto</button>
-            <button class="btn-secondary" style="flex:1;" onclick="corregirResultado(${i})">Equivocado</button>
-          </div>`;
-        }
-      } else {
-        estadoHtml = `
-          <div style="display:flex; gap:10px; align-items:center; margin:6px 0;">
-            <input type="number" min="0" id="games1_${i}" style="width:70px; text-align:center;">
-            <span style="font-weight:bold;">-</span>
-            <input type="number" min="0" id="games2_${i}" style="width:70px; text-align:center;">
-          </div>
-          <button class="btn-primary" onclick="cargarResultado(${i})">Cargar resultado</button>`;
-      }
-
-      return `<div style="border:1px solid #ddd; border-radius:8px; padding:10px;">
-        <strong>Cruce N° ${i+1}</strong><br>
-        ${nombre1}<br>
-        <span style="color:var(--naranja); font-weight:bold;">vs</span><br>
-        ${nombre2}
-        ${estadoHtml}
-      </div>`;
-    }).join('');
+  function mismaPareja(a, b) {
+    if (!a || !b) return false;
+    return a[0].nombre === b[0].nombre && a[1].nombre === b[1].nombre;
   }
 
-  async function guardarCruces() {
+  // Enumera todas las parejas del día como "Equipos": primero las de los cruces
+  // del sorteo inicial (en orden), luego las que quedaron esperando turno.
+  function calcularEquipos() {
+    const equipos = [];
+    sorteoExistente.cruces.forEach(c => {
+      equipos.push(c.pareja1);
+      if (c.pareja2) equipos.push(c.pareja2);
+    });
+    const libres = sorteoExistente.parejasLibres || [];
+    for (let i = 0; i < libres.length; i += 2) {
+      if (libres[i + 1]) equipos.push([libres[i], libres[i + 1]]);
+    }
+    return equipos;
+  }
+
+  // Se usa numeración de "Equipo N" cuando hay más de 2 parejas en juego
+  // (6 jugadores/1 pista, 8 jugadores/2 pistas, etc.). Con 4 jugadores (1 cruce,
+  // sin parejas libres) se muestran directamente los nombres.
+  function usarEquipos() {
+    return sorteoExistente.cruces.length > 1
+      || (sorteoExistente.parejasLibres && sorteoExistente.parejasLibres.length > 0);
+  }
+
+  function numeroEquipo(pareja, equipos) {
+    for (let i = 0; i < equipos.length; i++) {
+      if (mismaPareja(equipos[i], pareja)) return i + 1;
+    }
+    return '?';
+  }
+
+  function etiquetaPareja(pareja, equipos, usarEq) {
+    if (!usarEq) return nombrePareja(pareja);
+    return `<strong>Equipo ${numeroEquipo(pareja, equipos)}</strong>: ${nombrePareja(pareja)}`;
+  }
+
+  function rutaToId(ruta) {
+    return ruta.replace(/:/g, '_');
+  }
+
+  function obtenerCruce(ruta) {
+    const partes = ruta.split(':');
+    if (partes[0] === 'inicial') return sorteoExistente.cruces[parseInt(partes[1], 10)];
+    return sorteoExistente.rondasExtra[parseInt(partes[1], 10)].cruces[parseInt(partes[2], 10)];
+  }
+
+  function renderSetsInputsHtml(idBase, sets) {
+    let html = '<div style="display:flex; gap:10px; flex-wrap:wrap; margin:8px 0;">';
+    for (let s = 0; s < 4; s++) {
+      const val = (sets && sets[s]) ? sets[s] : null;
+      const v1 = val ? val.g1 : '';
+      const v2 = val ? val.g2 : '';
+      html += `<div style="text-align:center;">
+        <div style="font-size:12px; color:var(--gris); margin-bottom:2px;">Set ${s + 1}</div>
+        <div style="display:flex; align-items:center; gap:4px;">
+          <input type="number" min="1" max="7" id="${idBase}_s${s}_g1" value="${v1}" style="width:42px; text-align:center;">
+          <span>-</span>
+          <input type="number" min="1" max="7" id="${idBase}_s${s}_g2" value="${v2}" style="width:42px; text-align:center;">
+        </div>
+      </div>`;
+    }
+    html += '</div>';
+    return html;
+  }
+
+  function renderCruceCard(c, etiqueta1, etiqueta2, ruta) {
+    const miNombre = localStorage.getItem('miNombre');
+    const idBase = rutaToId(ruta);
+
+    if (!c.pareja2) {
+      return `<div style="border:1px solid #ddd; border-radius:8px; padding:10px;">
+        ${etiqueta1}<br><em>Descansa esta ronda, sin resultado</em>
+      </div>`;
+    }
+
+    const r = c.resultado || { estado: 'pendiente', sets: [null, null, null, null] };
+    const firme24h = r.estado === 'cargado' && r.fechaCarga
+      && (Date.now() - new Date(r.fechaCarga).getTime() > VEINTICUATRO_HS_MS);
+
+    let cuerpo = '';
+
+    if (r.estado === 'confirmado' || firme24h) {
+      const confirmadoPor = r.estado === 'confirmado' ? r.confirmadoPor : 'firme automáticamente (24hs)';
+      const resumen = (r.sets || []).filter(s => s).map(s => `${s.g1}-${s.g2}`).join(', ');
+      cuerpo = `<p style="color:var(--verde); font-weight:bold; margin:6px 0;">✅ ${resumen}</p>
+        <p style="color:var(--gris); margin-top:-4px;">Cargado por ${r.cargadoPor}. Confirmado por ${confirmadoPor}.</p>`;
+    } else if (r.estado === 'cargado') {
+      const resumen = (r.sets || []).filter(s => s).map(s => `${s.g1}-${s.g2}`).join(', ');
+      cuerpo = `<p style="font-weight:bold; margin:6px 0;">Resultado cargado: ${resumen}</p>
+        <p style="color:var(--gris); margin-top:-4px;">Cargado por ${r.cargadoPor}.</p>`;
+      if (miNombre === r.cargadoPor) {
+        cuerpo += `<p style="color:var(--gris);">Esperando que otro jugador lo confirme (o queda firme en 24hs).</p>
+          <button class="btn-secondary" onclick="corregirResultadoCruce('${ruta}')">Corregir</button>`;
+      } else {
+        cuerpo += `<div style="display:flex; gap:10px;">
+          <button class="btn-primary" style="flex:1;" onclick="confirmarResultadoCruce('${ruta}')">Correcto</button>
+          <button class="btn-secondary" style="flex:1;" onclick="corregirResultadoCruce('${ruta}')">Equivocado</button>
+        </div>`;
+      }
+    } else {
+      cuerpo = renderSetsInputsHtml(idBase, r.sets)
+        + `<button class="btn-primary" onclick="cargarResultadoCruce('${ruta}')">Cargar resultado</button>`;
+    }
+
+    return `<div style="border:1px solid #ddd; border-radius:8px; padding:10px;">
+      ${etiqueta1}<br>
+      <span style="color:var(--naranja); font-weight:bold;">vs</span><br>
+      ${etiqueta2}
+      ${cuerpo}
+    </div>`;
+  }
+
+  function renderListaResultados() {
+    const cont = document.getElementById('listaResultados');
+    const equipos = calcularEquipos();
+    const usarEq = usarEquipos();
+
+    let html = '';
+
+    if (usarEq) html += '<h4 style="margin-bottom:0;">Ronda 1</h4>';
+    sorteoExistente.cruces.forEach((c, i) => {
+      const et1 = etiquetaPareja(c.pareja1, equipos, usarEq);
+      const et2 = c.pareja2 ? etiquetaPareja(c.pareja2, equipos, usarEq) : null;
+      html += renderCruceCard(c, et1, et2, `inicial:${i}`);
+    });
+
+    (sorteoExistente.rondasExtra || []).forEach((ronda, ri) => {
+      html += `<h4 style="margin-bottom:0;">Ronda ${ri + 2}</h4>`;
+      ronda.cruces.forEach((c, i) => {
+        const et1 = etiquetaPareja(c.pareja1, equipos, usarEq);
+        const et2 = c.pareja2 ? etiquetaPareja(c.pareja2, equipos, usarEq) : null;
+        html += renderCruceCard(c, et1, et2, `extra:${ri}:${i}`);
+      });
+    });
+
+    cont.innerHTML = html;
+
+    const armador = document.getElementById('armadorProximaRonda');
+    if (usarEq) {
+      armador.style.display = 'flex';
+      if (armadorProximaRondaActivo) {
+        renderArmadorProximaRonda();
+      } else {
+        armador.innerHTML = '<button class="btn-secondary" onclick="mostrarArmadorProximaRonda()">Definir próximo cruce</button>';
+      }
+    } else {
+      armador.style.display = 'none';
+      armador.innerHTML = '';
+    }
+  }
+
+  async function guardarSorteoCompleto() {
     const codigo = localStorage.getItem('torneoSeleccionado');
     const fecha = fechaHoy();
+    const payload = { cruces: sorteoExistente.cruces };
+    if (sorteoExistente.rondasExtra) payload.rondasExtra = sorteoExistente.rondasExtra;
     try {
-      await setDoc(doc(db, 'torneos', codigo, 'sorteos', fecha), { cruces: sorteoExistente.cruces }, { merge: true });
+      await setDoc(doc(db, 'torneos', codigo, 'sorteos', fecha), payload, { merge: true });
     } catch (e) {
       alert('No se pudo guardar el resultado: ' + e.message);
       return false;
@@ -1815,48 +1991,144 @@
     return true;
   }
 
-  async function cargarResultado(i) {
-    const g1 = parseInt(document.getElementById(`games1_${i}`).value, 10);
-    const g2 = parseInt(document.getElementById(`games2_${i}`).value, 10);
-    if (isNaN(g1) || isNaN(g2) || g1 < 0 || g2 < 0) {
-      alert('Ingresá un resultado válido para ambas parejas.');
+  async function cargarResultadoCruce(ruta) {
+    const idBase = rutaToId(ruta);
+    const sets = [];
+    for (let s = 0; s < 4; s++) {
+      const v1raw = document.getElementById(`${idBase}_s${s}_g1`).value;
+      const v2raw = document.getElementById(`${idBase}_s${s}_g2`).value;
+      if (v1raw === '' && v2raw === '') {
+        sets.push(null);
+        continue;
+      }
+      const g1 = parseInt(v1raw, 10);
+      const g2 = parseInt(v2raw, 10);
+      if (isNaN(g1) || isNaN(g2) || g1 < 1 || g1 > 7 || g2 < 1 || g2 > 7) {
+        alert(`El Set ${s + 1} debe tener un valor entre 1 y 7 para ambos equipos (o dejarlo vacío si no se jugó).`);
+        return;
+      }
+      sets.push({ g1, g2 });
+    }
+    if (sets.every(s => s === null)) {
+      alert('Cargá el resultado de al menos un set.');
       return;
     }
-    const miNombre = localStorage.getItem('miNombre');
 
-    sorteoExistente.cruces[i].resultado = {
-      gamesPareja1: g1,
-      gamesPareja2: g2,
+    const miNombre = localStorage.getItem('miNombre');
+    const cruce = obtenerCruce(ruta);
+    cruce.resultado = {
+      sets: sets,
       cargadoPor: miNombre,
       fechaCarga: new Date().toISOString(),
       confirmadoPor: null,
       estado: 'cargado'
     };
 
-    if (await guardarCruces()) renderListaResultados();
+    if (await guardarSorteoCompleto()) renderListaResultados();
   }
 
-  async function confirmarResultado(i) {
+  async function confirmarResultadoCruce(ruta) {
     const miNombre = localStorage.getItem('miNombre');
-    sorteoExistente.cruces[i].resultado.confirmadoPor = miNombre;
-    sorteoExistente.cruces[i].resultado.estado = 'confirmado';
+    const cruce = obtenerCruce(ruta);
+    cruce.resultado.confirmadoPor = miNombre;
+    cruce.resultado.estado = 'confirmado';
 
-    if (await guardarCruces()) renderListaResultados();
+    if (await guardarSorteoCompleto()) renderListaResultados();
   }
 
-  async function corregirResultado(i) {
+  async function corregirResultadoCruce(ruta) {
     if (!confirm('¿Marcar este resultado como equivocado y volver a cargarlo?')) return;
 
-    sorteoExistente.cruces[i].resultado = {
-      gamesPareja1: null,
-      gamesPareja2: null,
-      cargadoPor: null,
-      fechaCarga: null,
-      confirmadoPor: null,
-      estado: 'pendiente'
-    };
+    const cruce = obtenerCruce(ruta);
+    cruce.resultado = { sets: [null, null, null, null], cargadoPor: null, fechaCarga: null, confirmadoPor: null, estado: 'pendiente' };
 
-    if (await guardarCruces()) renderListaResultados();
+    if (await guardarSorteoCompleto()) renderListaResultados();
+  }
+
+  // ---- DEFINIR PRÓXIMO CRUCE (rotación con 6/8 jugadores) ----
+
+  let armadorProximaRondaActivo = false;
+  let equipoSeleccionadoProximaRonda = null;
+  let proximaRondaCruces = [];
+  let equiposLibresProximaRonda = [];
+
+  function mostrarArmadorProximaRonda() {
+    const equipos = calcularEquipos();
+    equiposLibresProximaRonda = equipos.map((pareja, idx) => ({ numero: idx + 1, pareja }));
+    proximaRondaCruces = [];
+    equipoSeleccionadoProximaRonda = null;
+    armadorProximaRondaActivo = true;
+    renderArmadorProximaRonda();
+  }
+
+  function renderArmadorProximaRonda() {
+    const cont = document.getElementById('armadorProximaRonda');
+
+    let html = '<label>Definir próximo cruce</label>';
+    html += '<div class="chips">';
+    equiposLibresProximaRonda.forEach(e => {
+      const sel = equipoSeleccionadoProximaRonda === e ? ' selected' : '';
+      html += `<div class="chip${sel}" onclick="tocarEquipoProximaRonda(${e.numero})">Equipo ${e.numero}</div>`;
+    });
+    html += '</div>';
+
+    if (proximaRondaCruces.length > 0) {
+      html += '<div style="display:flex; flex-direction:column; gap:6px; margin-top:8px;">';
+      proximaRondaCruces.forEach((c, i) => {
+        html += `<div class="chip selected" style="cursor:default; display:flex; justify-content:space-between; align-items:center;">
+          <span>Equipo ${c[0].numero} vs Equipo ${c[1].numero}</span>
+          <span style="cursor:pointer; color:var(--naranja); margin-left:10px;" onclick="deshacerCruceProximaRonda(${i})">✕</span>
+        </div>`;
+      });
+      html += '</div>';
+    }
+
+    if (proximaRondaCruces.length > 0) {
+      html += `<button class="btn-primary" onclick="confirmarProximaRonda()">Confirmar próximo cruce (${proximaRondaCruces.length}/${sorteoExistente.pistas})</button>`;
+    }
+
+    cont.innerHTML = html;
+  }
+
+  function tocarEquipoProximaRonda(numero) {
+    const equipo = equiposLibresProximaRonda.find(e => e.numero === numero);
+    if (!equipo) return;
+
+    if (equipoSeleccionadoProximaRonda === null) {
+      equipoSeleccionadoProximaRonda = equipo;
+    } else if (equipoSeleccionadoProximaRonda === equipo) {
+      equipoSeleccionadoProximaRonda = null;
+    } else {
+      if (proximaRondaCruces.length >= sorteoExistente.pistas) {
+        alert(`Ya armaste ${sorteoExistente.pistas} cruce(s), el máximo según las pistas de hoy.`);
+        equipoSeleccionadoProximaRonda = null;
+        renderArmadorProximaRonda();
+        return;
+      }
+      proximaRondaCruces.push([equipoSeleccionadoProximaRonda, equipo]);
+      equiposLibresProximaRonda = equiposLibresProximaRonda.filter(e => e !== equipoSeleccionadoProximaRonda && e !== equipo);
+      equipoSeleccionadoProximaRonda = null;
+    }
+    renderArmadorProximaRonda();
+  }
+
+  function deshacerCruceProximaRonda(i) {
+    const [a, b] = proximaRondaCruces[i];
+    equiposLibresProximaRonda.push(a, b);
+    proximaRondaCruces.splice(i, 1);
+    renderArmadorProximaRonda();
+  }
+
+  async function confirmarProximaRonda() {
+    const nuevaRonda = {
+      cruces: proximaRondaCruces.map(([a, b]) => ({
+        pareja1: a.pareja, pareja2: b.pareja, resultado: null
+      }))
+    };
+    sorteoExistente.rondasExtra = [...(sorteoExistente.rondasExtra || []), nuevaRonda];
+    armadorProximaRondaActivo = false;
+
+    if (await guardarSorteoCompleto()) renderListaResultados();
   }
 
   function formatearPareja(pareja, respetarLado) {
@@ -2067,6 +2339,7 @@
   window.abrirMisTorneos = abrirMisTorneos;
   window.abrirVerTorneo = abrirVerTorneo;
   window.volverDesdeJornada = volverDesdeJornada;
+  window.volverAMisTorneos = volverAMisTorneos;
   window.abrirEditarTorneo = abrirEditarTorneo;
   window.guardarEdicionTorneo = guardarEdicionTorneo;
   window.irASorteo = irASorteo;
@@ -2094,9 +2367,13 @@
   window.confirmarCrucesManual = confirmarCrucesManual;
   window.sortearCruces = sortearCruces;
   window.abrirResultados = abrirResultados;
-  window.cargarResultado = cargarResultado;
-  window.confirmarResultado = confirmarResultado;
-  window.corregirResultado = corregirResultado;
+  window.cargarResultadoCruce = cargarResultadoCruce;
+  window.confirmarResultadoCruce = confirmarResultadoCruce;
+  window.corregirResultadoCruce = corregirResultadoCruce;
+  window.mostrarArmadorProximaRonda = mostrarArmadorProximaRonda;
+  window.tocarEquipoProximaRonda = tocarEquipoProximaRonda;
+  window.deshacerCruceProximaRonda = deshacerCruceProximaRonda;
+  window.confirmarProximaRonda = confirmarProximaRonda;
 
   // Poblar los selects de hora (24hs, sin AM/PM) al cargar la app
   poblarSelectHora('horaTorneoH', 'horaTorneoM');
