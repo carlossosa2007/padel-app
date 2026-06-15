@@ -159,7 +159,12 @@
     </div>
 
     <label>Hora de juego</label>
-    <input type="time" id="horaTorneo" step="60">
+    <label>Hora de juego</label>
+    <div style="display:flex; gap:10px; align-items:center;">
+      <select id="horaTorneoH" style="flex:1;"></select>
+      <span style="font-weight:bold;">:</span>
+      <select id="horaTorneoM" style="flex:1;"></select>
+    </div>
 
     <label>Club frecuente</label>
     <input type="text" id="clubTorneo" placeholder="Nombre del club">
@@ -233,7 +238,11 @@
     </div>
 
     <label>Hora de juego</label>
-    <input type="time" id="horaEditar" step="60">
+    <div style="display:flex; gap:10px; align-items:center;">
+      <select id="horaEditarH" style="flex:1;"></select>
+      <span style="font-weight:bold;">:</span>
+      <select id="horaEditarM" style="flex:1;"></select>
+    </div>
 
     <label>Club frecuente</label>
     <input type="text" id="clubEditar" placeholder="Nombre del club">
@@ -499,7 +508,7 @@
       nombre: nombre,
       frecuencia: valores.frecuencia,
       dias: diasSeleccionados,
-      hora: document.getElementById('horaTorneo').value || '',
+      hora: leerHoraSelect('horaTorneoH', 'horaTorneoM'),
       club: document.getElementById('clubTorneo').value.trim() || '',
       privado: document.getElementById('torneoPrivado').checked,
       creador: miNombre,
@@ -532,6 +541,38 @@
 
   function fechaHoy() {
     return new Date().toISOString().slice(0, 10); // YYYY-MM-DD
+  }
+
+  // ---- HORA EN FORMATO 24HS (01:00 a 24:00, sin AM/PM) ----
+
+  function poblarSelectHora(idHoras, idMinutos) {
+    const selH = document.getElementById(idHoras);
+    const selM = document.getElementById(idMinutos);
+
+    let opcionesH = '<option value="">--</option>';
+    for (let i = 1; i <= 24; i++) {
+      const h = String(i).padStart(2, '0');
+      opcionesH += `<option value="${h}">${h}</option>`;
+    }
+    selH.innerHTML = opcionesH;
+
+    let opcionesM = '<option value="">--</option>';
+    ['00', '15', '30', '45'].forEach(m => {
+      opcionesM += `<option value="${m}">${m}</option>`;
+    });
+    selM.innerHTML = opcionesM;
+  }
+
+  function leerHoraSelect(idHoras, idMinutos) {
+    const h = document.getElementById(idHoras).value;
+    const m = document.getElementById(idMinutos).value;
+    return (h && m) ? `${h}:${m}` : '';
+  }
+
+  function asignarHoraSelect(idHoras, idMinutos, hora) {
+    const [h, m] = (hora || '').split(':');
+    document.getElementById(idHoras).value = h || '';
+    document.getElementById(idMinutos).value = m || '';
   }
 
   async function abrirMisTorneos() {
@@ -596,7 +637,7 @@
     [...document.querySelectorAll('#diasEditar .chip')].forEach(c => {
       c.classList.toggle('selected', (torneoInfo.dias || []).includes(c.textContent));
     });
-    document.getElementById('horaEditar').value = torneoInfo.hora || '';
+    asignarHoraSelect('horaEditarH', 'horaEditarM', torneoInfo.hora || '');
     document.getElementById('clubEditar').value = torneoInfo.club || '';
     goTo('screen-editar-torneo');
   }
@@ -605,7 +646,7 @@
     const codigo = localStorage.getItem('torneoSeleccionado');
     const diasSeleccionados = [...document.querySelectorAll('#diasEditar .chip.selected')]
       .map(c => c.textContent);
-    const hora = document.getElementById('horaEditar').value || '';
+    const hora = leerHoraSelect('horaEditarH', 'horaEditarM');
     const club = document.getElementById('clubEditar').value.trim() || '';
 
     try {
@@ -711,8 +752,13 @@
       confirmadosData = [];
       for (const nombre of confirmados) {
         const perfilSnap = await getDoc(doc(db, 'jugadores', nombre));
-        const j = perfilSnap.data();
-        confirmadosData.push({ nombre: j.nombre, lado: j.lado, categoria: j.categoria, esRandom: false });
+        if (perfilSnap.exists()) {
+          const j = perfilSnap.data();
+          confirmadosData.push({ nombre: j.nombre, lado: j.lado, categoria: j.categoria, esRandom: false });
+        } else {
+          // Perfil no encontrado (nombre guardado sin perfil asociado): usar valores por defecto
+          confirmadosData.push({ nombre: nombre, lado: 'Ambos', categoria: '8va', esRandom: false });
+        }
       }
 
       // Revisar si ya existe un sorteo guardado para hoy
@@ -830,9 +876,11 @@
     const estoyConfirmado = confirmadosData.some(j => j.nombre === miNombre);
 
     if (!adminHoy) {
-      cont.innerHTML = `
-        <p style="color:var(--gris);">Todavía no se eligió administrador para hoy.</p>
-        <button class="btn-secondary" onclick="abrirElegirAdmin()">Elegir administrador del día</button>`;
+      let html = `<p style="color:var(--gris);">Todavía no se eligió administrador para hoy.</p>`;
+      if (estoyConfirmado) {
+        html += `<button class="btn-secondary" onclick="abrirElegirAdmin()">Elegir administrador del día</button>`;
+      }
+      cont.innerHTML = html;
       return;
     }
 
@@ -904,6 +952,11 @@
   function abrirElegirAdmin() {
     if (confirmadosData.length === 0) {
       alert('Todavía no hay jugadores confirmados, no se puede elegir un administrador.');
+      return;
+    }
+    const miNombre = localStorage.getItem('miNombre');
+    if (!confirmadosData.some(j => j.nombre === miNombre)) {
+      alert('Solo los jugadores confirmados de hoy pueden elegir administrador.');
       return;
     }
     renderElegirAdmin();
@@ -1948,6 +2001,10 @@
   window.cargarResultado = cargarResultado;
   window.confirmarResultado = confirmarResultado;
   window.corregirResultado = corregirResultado;
+
+  // Poblar los selects de hora (24hs, sin AM/PM) al cargar la app
+  poblarSelectHora('horaTorneoH', 'horaTorneoM');
+  poblarSelectHora('horaEditarH', 'horaEditarM');
 </script>
 </body>
 </html>
