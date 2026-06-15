@@ -291,7 +291,7 @@
       <label>Parejas y cruces iniciales</label>
       <div id="crucesGuardadosView"></div>
       <button class="btn-secondary" onclick="compartirCruces()">Compartir cruces</button>
-      <button class="btn-primary" onclick="abrirResultados()">Anotar resultados</button>
+      <button class="btn-primary" id="btnAnotarResultados" onclick="abrirResultados()">Anotar resultados</button>
 
       <div id="seccionCuestionamiento"></div>
     </div>
@@ -1000,6 +1000,7 @@
       seccionCruces.style.gap = '10px';
       renderCrucesGuardados();
       renderCuestionamiento();
+      document.getElementById('btnAnotarResultados').textContent = hayResultadosCargados() ? 'Ver resultados del día' : 'Anotar resultados';
     } else {
       seccionCruces.style.display = 'none';
     }
@@ -1809,7 +1810,20 @@
 
   // ---- ANOTAR RESULTADOS ----
 
-  const VEINTICUATRO_HS_MS = 24 * 60 * 60 * 1000;
+  const DOCE_HS_MS = 12 * 60 * 60 * 1000;
+
+  function letraEquipo(numero) {
+    return String.fromCharCode(64 + numero); // 1->A, 2->B, 3->C, 4->D...
+  }
+
+  function hayResultadosCargados() {
+    if (!sorteoExistente) return false;
+    const todosLosCruces = [
+      ...sorteoExistente.cruces,
+      ...((sorteoExistente.rondasExtra || []).flatMap(r => r.cruces))
+    ];
+    return todosLosCruces.some(c => c.resultado && c.resultado.estado !== 'pendiente');
+  }
 
   function abrirResultados() {
     document.getElementById('formatoResultados').textContent = sorteoExistente.formatoSet;
@@ -1858,8 +1872,9 @@
   }
 
   function etiquetaPareja(pareja, equipos, usarEq) {
-    if (!usarEq) return nombrePareja(pareja);
-    return `<strong>Equipo ${numeroEquipo(pareja, equipos)}</strong>: ${nombrePareja(pareja)}`;
+    const letra = letraEquipo(numeroEquipo(pareja, equipos));
+    const base = usarEq ? `<strong>Equipo ${numeroEquipo(pareja, equipos)}</strong>: ${nombrePareja(pareja)}` : nombrePareja(pareja);
+    return `${base} <span style="color:var(--naranja); font-weight:bold;">(${letra})</span>`;
   }
 
   function rutaToId(ruta) {
@@ -1888,10 +1903,10 @@
     return html;
   }
 
-  function renderSetsInputsHtml(idBase, sets, maxValor) {
-    let header = '<div style="display:flex; gap:10px; margin-top:8px;">';
-    let fila1 = '<div style="display:flex; gap:10px; margin-bottom:2px;">';
-    let fila2 = '<div style="display:flex; gap:10px;">';
+  function renderSetsInputsHtml(idBase, sets, maxValor, letra1, letra2) {
+    let header = '<div style="display:flex; gap:10px; margin-top:8px;"><div style="width:22px;"></div>';
+    let fila1 = `<div style="display:flex; gap:10px; align-items:center; margin-bottom:2px;"><div style="width:22px; font-weight:bold; color:var(--naranja);">${letra1}</div>`;
+    let fila2 = `<div style="display:flex; gap:10px; align-items:center;"><div style="width:22px; font-weight:bold; color:var(--naranja);">${letra2}</div>`;
 
     for (let s = 0; s < 4; s++) {
       const val = (sets && sets[s]) ? sets[s] : null;
@@ -1909,7 +1924,25 @@
     return header + fila1 + fila2;
   }
 
-  function renderCruceCard(c, etiqueta1, etiqueta2, ruta) {
+  function renderSetsDisplayHtml(sets, letra1, letra2) {
+    let header = '<div style="display:flex; gap:10px; margin-top:8px;"><div style="width:22px;"></div>';
+    let fila1 = `<div style="display:flex; gap:10px; align-items:center; margin-bottom:2px;"><div style="width:22px; font-weight:bold; color:var(--naranja);">${letra1}</div>`;
+    let fila2 = `<div style="display:flex; gap:10px; align-items:center;"><div style="width:22px; font-weight:bold; color:var(--naranja);">${letra2}</div>`;
+
+    for (let s = 0; s < 4; s++) {
+      const val = (sets && sets[s]) ? sets[s] : null;
+      header += `<div style="width:56px; text-align:center; font-size:12px; color:var(--gris);">Set ${s + 1}</div>`;
+      fila1 += `<div style="width:56px; text-align:center; font-weight:bold; font-size:16px;">${val ? val.g1 : '-'}</div>`;
+      fila2 += `<div style="width:56px; text-align:center; font-weight:bold; font-size:16px;">${val ? val.g2 : '-'}</div>`;
+    }
+
+    header += '</div>';
+    fila1 += '</div>';
+    fila2 += '</div>';
+    return header + fila1 + fila2;
+  }
+
+  function renderCruceCard(c, etiqueta1, etiqueta2, letra1, letra2, ruta) {
     const miNombre = localStorage.getItem('miNombre');
     const idBase = rutaToId(ruta);
 
@@ -1920,22 +1953,21 @@
     }
 
     const r = c.resultado || { estado: 'pendiente', sets: [null, null, null, null] };
-    const firme24h = r.estado === 'cargado' && r.fechaCarga
-      && (Date.now() - new Date(r.fechaCarga).getTime() > VEINTICUATRO_HS_MS);
+    const firme12h = r.estado === 'cargado' && r.fechaCarga
+      && (Date.now() - new Date(r.fechaCarga).getTime() > DOCE_HS_MS);
 
     let cuerpo = '';
 
-    if (r.estado === 'confirmado' || firme24h) {
-      const confirmadoPor = r.estado === 'confirmado' ? r.confirmadoPor : 'firme automáticamente (24hs)';
-      const resumen = (r.sets || []).filter(s => s).map(s => `${s.g1}-${s.g2}`).join(', ');
-      cuerpo = `<p style="color:var(--verde); font-weight:bold; margin:6px 0;">✅ ${resumen}</p>
-        <p style="color:var(--gris); margin-top:-4px;">Cargado por ${r.cargadoPor}. Confirmado por ${confirmadoPor}.</p>`;
+    if (r.estado === 'confirmado' || firme12h) {
+      const confirmadoPor = r.estado === 'confirmado' ? r.confirmadoPor : 'firme automáticamente (12hs)';
+      cuerpo = `<p style="color:var(--verde); font-weight:bold; margin:6px 0 0 0;">✅ Resultado confirmado</p>`
+        + renderSetsDisplayHtml(r.sets, letra1, letra2)
+        + `<p style="color:var(--gris); margin-top:6px;">Cargado por ${r.cargadoPor}. Confirmado por ${confirmadoPor}.</p>`;
     } else if (r.estado === 'cargado') {
-      const resumen = (r.sets || []).filter(s => s).map(s => `${s.g1}-${s.g2}`).join(', ');
-      cuerpo = `<p style="font-weight:bold; margin:6px 0;">Resultado cargado: ${resumen}</p>
-        <p style="color:var(--gris); margin-top:-4px;">Cargado por ${r.cargadoPor}.</p>`;
+      cuerpo = renderSetsDisplayHtml(r.sets, letra1, letra2)
+        + `<p style="color:var(--gris); margin-top:6px;">Cargado por ${r.cargadoPor}.</p>`;
       if (miNombre === r.cargadoPor) {
-        cuerpo += `<p style="color:var(--gris);">Esperando que otro jugador lo confirme (o queda firme en 24hs).</p>
+        cuerpo += `<p style="color:var(--gris);">Esperando que otro jugador lo confirme (o queda firme en 12hs).</p>
           <button class="btn-secondary" onclick="corregirResultadoCruce('${ruta}')">Corregir</button>`;
       } else {
         cuerpo += `<div style="display:flex; gap:10px;">
@@ -1944,7 +1976,7 @@
         </div>`;
       }
     } else {
-      cuerpo = renderSetsInputsHtml(idBase, r.sets, maxGamesSet(sorteoExistente.formatoSet))
+      cuerpo = renderSetsInputsHtml(idBase, r.sets, maxGamesSet(sorteoExistente.formatoSet), letra1, letra2)
         + `<button class="btn-primary" onclick="cargarResultadoCruce('${ruta}')">Cargar resultado</button>`;
     }
 
@@ -1967,7 +1999,9 @@
     sorteoExistente.cruces.forEach((c, i) => {
       const et1 = etiquetaPareja(c.pareja1, equipos, usarEq);
       const et2 = c.pareja2 ? etiquetaPareja(c.pareja2, equipos, usarEq) : null;
-      html += renderCruceCard(c, et1, et2, `inicial:${i}`);
+      const letra1 = letraEquipo(numeroEquipo(c.pareja1, equipos));
+      const letra2 = c.pareja2 ? letraEquipo(numeroEquipo(c.pareja2, equipos)) : null;
+      html += renderCruceCard(c, et1, et2, letra1, letra2, `inicial:${i}`);
     });
 
     (sorteoExistente.rondasExtra || []).forEach((ronda, ri) => {
@@ -1975,7 +2009,9 @@
       ronda.cruces.forEach((c, i) => {
         const et1 = etiquetaPareja(c.pareja1, equipos, usarEq);
         const et2 = c.pareja2 ? etiquetaPareja(c.pareja2, equipos, usarEq) : null;
-        html += renderCruceCard(c, et1, et2, `extra:${ri}:${i}`);
+        const letra1 = letraEquipo(numeroEquipo(c.pareja1, equipos));
+        const letra2 = c.pareja2 ? letraEquipo(numeroEquipo(c.pareja2, equipos)) : null;
+        html += renderCruceCard(c, et1, et2, letra1, letra2, `extra:${ri}:${i}`);
       });
     });
 
@@ -2060,10 +2096,11 @@
   }
 
   async function corregirResultadoCruce(ruta) {
-    if (!confirm('¿Marcar este resultado como equivocado y volver a cargarlo?')) return;
+    if (!confirm('¿Volver a editar este resultado? Los valores cargados van a quedar precargados para corregir.')) return;
 
     const cruce = obtenerCruce(ruta);
-    cruce.resultado = { sets: [null, null, null, null], cargadoPor: null, fechaCarga: null, confirmadoPor: null, estado: 'pendiente' };
+    cruce.resultado.estado = 'pendiente';
+    cruce.resultado.confirmadoPor = null;
 
     if (await guardarSorteoCompleto()) renderListaResultados();
   }
