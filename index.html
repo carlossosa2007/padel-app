@@ -70,6 +70,12 @@
     font-weight: normal;
     padding: 4px 0;
   }
+  .torneo-breadcrumb {
+    color: var(--gris);
+    font-size: 14px;
+    font-weight: bold;
+    margin: 0;
+  }
   input, select {
     padding: 12px;
     border: 1px solid #ccc;
@@ -159,7 +165,6 @@
     </div>
 
     <label>Hora de juego</label>
-    <label>Hora de juego</label>
     <div style="display:flex; gap:10px; align-items:center;">
       <select id="horaTorneoH" style="flex:1;"></select>
       <span style="font-weight:bold;">:</span>
@@ -201,10 +206,9 @@
     <h3 id="tituloDetalleTorneo"></h3>
 
     <div style="background:var(--fondo); border-radius:8px; padding:10px; display:flex; flex-direction:column; gap:4px;">
-      <p style="margin:0;"><strong>Código:</strong> <span id="detalleCodigo"></span></p>
-      <p style="margin:0;"><strong>Club frecuente:</strong> <span id="detalleClub"></span></p>
-      <p style="margin:0;"><strong>Días más frecuentes:</strong> <span id="detalleDias"></span></p>
+      <p style="margin:0;"><strong>Días más frecuentes de juego:</strong> <span id="detalleDias"></span></p>
       <p style="margin:0;"><strong>Hora de juego:</strong> <span id="detalleHora"></span></p>
+      <p style="margin:0;"><strong>Club:</strong> <span id="detalleClub"></span></p>
     </div>
 
     <button class="btn-secondary" onclick="abrirEditarTorneo()">Editar información del torneo</button>
@@ -253,6 +257,7 @@
   <!-- PANTALLA JORNADA: bolsa de jugadores -->
   <div class="screen" id="screen-jornada">
     <button class="btn-volver" onclick="goTo('screen-detalle-torneo')">&larr; Volver</button>
+    <h3 id="tituloJornada"></h3>
 
     <div id="bannerJornada"></div>
 
@@ -263,10 +268,10 @@
       <p style="margin:0;"><strong>Club:</strong> <span id="infoClub"></span></p>
       <p style="margin:0; display:none;" id="filaInfoPistas"><strong>Cantidad de pistas para hoy:</strong> <span id="infoPistas"></span></p>
       <p style="margin:0; display:none;" id="filaInfoFormato"><strong>Formato de set para hoy:</strong> <span id="infoFormato"></span></p>
-      <p style="margin:0;"><strong>Jugadores confirmados:</strong> <span id="infoConfirmados"></span></p>
+      <p style="margin:0;"><strong>Jugadores frecuentes confirmados:</strong> <span id="infoConfirmados"></span></p>
     </div>
 
-    <h3>Jugadores confirmados</h3>
+    <h3>Jugadores frecuentes confirmados</h3>
     <p style="color:var(--gris); margin-top:-10px;">Tocá un jugador para ver sus estadísticas</p>
 
     <div id="listaJornada" class="chips"></div>
@@ -293,6 +298,7 @@
   <!-- PANTALLA ELEGIR ADMINISTRADOR -->
   <div class="screen" id="screen-elegir-admin">
     <button class="btn-volver" onclick="goTo('screen-jornada')">&larr; Volver</button>
+    <p class="torneo-breadcrumb" id="tituloElegirAdmin"></p>
     <h3>Elegir administrador del día</h3>
     <p style="color:var(--gris);">El administrador maneja pistas, formato y sorteo de hoy. Se necesitan 2 jugadores proponiendo al mismo (1 si hay 2 o menos inscriptos confirmados).</p>
 
@@ -306,6 +312,7 @@
   <!-- PANTALLA ARMAR PAREJAS (manual) -->
   <div class="screen" id="screen-armar-parejas">
     <button class="btn-volver" onclick="goTo('screen-jornada')">&larr; Volver</button>
+    <p class="torneo-breadcrumb" id="tituloArmarParejas"></p>
     <h3>Armar parejas</h3>
     <p style="color:var(--gris);">Tocá dos jugadores para formar una pareja.</p>
 
@@ -320,6 +327,7 @@
   <!-- PANTALLA PAREJAS FORMADAS / ELEGIR MODO DE CRUCES -->
   <div class="screen" id="screen-cruces">
     <button class="btn-volver" onclick="goTo('screen-jornada')">&larr; Volver</button>
+    <p class="torneo-breadcrumb" id="tituloCruces"></p>
     <h3>Parejas formadas</h3>
 
     <div id="listaParejasFormadas" style="display:flex; flex-direction:column; gap:6px;"></div>
@@ -333,6 +341,7 @@
   <!-- PANTALLA ARMAR CRUCES (manual) -->
   <div class="screen" id="screen-armar-cruces">
     <button class="btn-volver" onclick="goTo('screen-cruces')">&larr; Volver</button>
+    <p class="torneo-breadcrumb" id="tituloArmarCruces"></p>
     <h3>Armar cruces</h3>
     <p style="color:var(--gris);">Tocá dos parejas para formar un cruce. Cruces armados / pistas disponibles: <span id="pistasDisponiblesInfo"></span></p>
 
@@ -347,6 +356,7 @@
   <!-- PANTALLA ANOTAR RESULTADOS -->
   <div class="screen" id="screen-resultados">
     <button class="btn-volver" onclick="goTo('screen-jornada')">&larr; Volver</button>
+    <p class="torneo-breadcrumb" id="tituloResultados"></p>
     <h3>Resultados de hoy</h3>
     <p style="color:var(--gris); margin-top:-10px;">Formato: sets a <span id="formatoResultados"></span> games</p>
 
@@ -356,6 +366,7 @@
   <!-- PANTALLA SORTEO (parejas aleatorias) -->
   <div class="screen" id="screen-sorteo">
     <button class="btn-volver" onclick="goTo('screen-jornada')">&larr; Volver</button>
+    <p class="torneo-breadcrumb" id="tituloSorteo"></p>
     <h3>Opciones de sorteo</h3>
 
     <label>Lado de la pista</label>
@@ -453,7 +464,7 @@
   const app = initializeApp(firebaseConfig);
   const db = getFirestore(app);
 
-  let valores = { frecuencia: 1, pistasHoy: 1, formatoSetHoy: '4' };
+  let valores = { frecuencia: 1, pistasHoy: 1, formatoSetHoy: '6' };
 
   function goTo(id) {
     document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
@@ -611,13 +622,25 @@
   let torneoJugadores = []; // lista de nombres inscriptos en el torneo seleccionado
   let torneoInfo = null; // datos completos del torneo seleccionado (nombre, dias, hora, club, codigo)
 
+  function tituloTorneoTexto() {
+    return torneoInfo ? `${torneoInfo.nombre} (${torneoInfo.codigo})` : '';
+  }
+
+  function actualizarBreadcrumbsTorneo() {
+    const texto = tituloTorneoTexto();
+    ['tituloElegirAdmin', 'tituloArmarParejas', 'tituloCruces', 'tituloArmarCruces', 'tituloResultados', 'tituloSorteo'].forEach(id => {
+      const el = document.getElementById(id);
+      if (el) el.textContent = texto;
+    });
+  }
+
   async function abrirDetalleTorneo(codigo) {
     localStorage.setItem('torneoSeleccionado', codigo);
 
     const torneoSnap = await getDoc(doc(db, 'torneos', codigo));
     const torneo = torneoSnap.data();
     torneoInfo = torneo;
-    document.getElementById('tituloDetalleTorneo').textContent = 'Torneo: ' + torneo.nombre;
+    document.getElementById('tituloDetalleTorneo').textContent = tituloTorneoTexto();
     renderDetalleInfo();
     torneoJugadores = torneo.jugadores || [];
 
@@ -626,7 +649,6 @@
   }
 
   function renderDetalleInfo() {
-    document.getElementById('detalleCodigo').textContent = torneoInfo.codigo;
     document.getElementById('detalleClub').textContent = torneoInfo.club || 'Sin definir';
     document.getElementById('detalleDias').textContent = (torneoInfo.dias && torneoInfo.dias.length > 0) ? torneoInfo.dias.join(', ') : 'Sin definir';
     document.getElementById('detalleHora').textContent = torneoInfo.hora || 'Sin definir';
@@ -791,10 +813,10 @@
         valores.formatoSetHoy = sorteoExistente.formatoSet;
       } else if (adminDoc.pistasHoy) {
         valores.pistasHoy = adminDoc.pistasHoy;
-        valores.formatoSetHoy = adminDoc.formatoSetHoy || '4';
+        valores.formatoSetHoy = adminDoc.formatoSetHoy || '6';
       } else {
         valores.pistasHoy = 1;
-        valores.formatoSetHoy = '4';
+        valores.formatoSetHoy = '6';
       }
 
       renderListaJornada();
@@ -807,6 +829,8 @@
   }
 
   function renderInfoHeaderEstatica() {
+    document.getElementById('tituloJornada').textContent = tituloTorneoTexto();
+    actualizarBreadcrumbsTorneo();
     const dias = (torneoInfo && torneoInfo.dias && torneoInfo.dias.length > 0) ? torneoInfo.dias.join(', ') : 'Sin definir';
     document.getElementById('infoDias').textContent = dias;
     document.getElementById('infoHora').textContent = (torneoInfo && torneoInfo.hora) ? torneoInfo.hora : 'Sin definir';
