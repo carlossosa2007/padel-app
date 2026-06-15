@@ -256,7 +256,7 @@
 
   <!-- PANTALLA JORNADA: bolsa de jugadores -->
   <div class="screen" id="screen-jornada">
-    <button class="btn-volver" onclick="goTo('screen-detalle-torneo')">&larr; Volver</button>
+    <button class="btn-volver" onclick="volverDesdeJornada()">&larr; Volver</button>
     <h3 id="tituloJornada"></h3>
 
     <div id="bannerJornada"></div>
@@ -449,7 +449,7 @@
 <script type="module">
   import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
   import {
-    getFirestore, doc, getDoc, setDoc, collection, getDocs, query, where, arrayUnion, arrayRemove
+    getFirestore, doc, getDoc, setDoc, collection, getDocs, query, where, arrayUnion, arrayRemove, onSnapshot
   } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 
   const firebaseConfig = {
@@ -635,6 +635,7 @@
   }
 
   async function abrirDetalleTorneo(codigo) {
+    desuscribirJornada();
     localStorage.setItem('torneoSeleccionado', codigo);
 
     const torneoSnap = await getDoc(doc(db, 'torneos', codigo));
@@ -751,6 +752,74 @@
   let adminDoc = null; // { propuestas, confirmado, pistasHoy, formatoSetHoy }
   let adminHoy = null; // nombre del administrador confirmado de hoy, o null
 
+  // Listeners en vivo (Firestore onSnapshot) activos mientras se está en "Ver torneo" y pantallas relacionadas
+  let unsubAsistencias = null;
+  let unsubSorteo = null;
+  let unsubAdmin = null;
+
+  function desuscribirJornada() {
+    if (unsubAsistencias) { unsubAsistencias(); unsubAsistencias = null; }
+    if (unsubSorteo) { unsubSorteo(); unsubSorteo = null; }
+    if (unsubAdmin) { unsubAdmin(); unsubAdmin = null; }
+  }
+
+  function volverDesdeJornada() {
+    desuscribirJornada();
+    goTo('screen-detalle-torneo');
+  }
+
+  async function actualizarConfirmadosData(confirmados) {
+    const nombresActuales = confirmadosData.map(j => j.nombre);
+    // Quitar a quienes ya no están confirmados
+    confirmadosData = confirmadosData.filter(j => confirmados.includes(j.nombre));
+    // Agregar a los nuevos confirmados
+    for (const nombre of confirmados) {
+      if (!nombresActuales.includes(nombre)) {
+        const perfilSnap = await getDoc(doc(db, 'jugadores', nombre));
+        if (perfilSnap.exists()) {
+          const j = perfilSnap.data();
+          confirmadosData.push({ nombre: j.nombre, lado: j.lado, categoria: j.categoria, esRandom: false });
+        } else {
+          confirmadosData.push({ nombre: nombre, lado: 'Ambos', categoria: '8va', esRandom: false });
+        }
+      }
+    }
+  }
+
+  function attachListenersJornada(codigo, fecha) {
+    desuscribirJornada();
+
+    unsubAsistencias = onSnapshot(doc(db, 'torneos', codigo, 'asistencias', fecha), async (snap) => {
+      const confirmados = snap.exists() ? (snap.data().confirmados || []) : [];
+      await actualizarConfirmadosData(confirmados);
+      renderListaJornada();
+      renderInfoHeaderEstatica();
+      recalcularValidezSorteo();
+    });
+
+    unsubSorteo = onSnapshot(doc(db, 'torneos', codigo, 'sorteos', fecha), (snap) => {
+      sorteoExistente = snap.exists() ? snap.data() : null;
+      recalcularValidezSorteo();
+      if (sorteoExistente && document.getElementById('screen-resultados').classList.contains('active')) {
+        renderListaResultados();
+      }
+    });
+
+    unsubAdmin = onSnapshot(doc(db, 'torneos', codigo, 'admins', fecha), (snap) => {
+      adminDoc = snap.exists() ? snap.data() : { propuestas: {}, confirmado: null };
+      adminHoy = adminDoc.confirmado || null;
+      recalcularValidezSorteo();
+
+      if (document.getElementById('screen-elegir-admin').classList.contains('active')) {
+        if (adminHoy) {
+          goTo('screen-jornada');
+        } else {
+          renderElegirAdmin();
+        }
+      }
+    });
+  }
+
   function mismosJugadores(a, b) {
     if (!a || !b || a.length !== b.length) return false;
     const sa = [...a].sort();
@@ -822,6 +891,7 @@
       renderListaJornada();
       renderInfoHeaderEstatica();
       recalcularValidezSorteo();
+      attachListenersJornada(codigo, fecha);
       goTo('screen-jornada');
     } catch (e) {
       alert('No se pudo abrir "Ver torneo": ' + e.message);
@@ -1134,6 +1204,7 @@
     }
 
     await renderConfirmados(codigo);
+    desuscribirJornada();
     goTo('screen-detalle-torneo');
   }
 
@@ -1995,6 +2066,7 @@
   window.compartirTorneo = compartirTorneo;
   window.abrirMisTorneos = abrirMisTorneos;
   window.abrirVerTorneo = abrirVerTorneo;
+  window.volverDesdeJornada = volverDesdeJornada;
   window.abrirEditarTorneo = abrirEditarTorneo;
   window.guardarEdicionTorneo = guardarEdicionTorneo;
   window.irASorteo = irASorteo;
