@@ -1872,23 +1872,41 @@
     return sorteoExistente.rondasExtra[parseInt(partes[1], 10)].cruces[parseInt(partes[2], 10)];
   }
 
-  function renderSetsInputsHtml(idBase, sets) {
-    let html = '<div style="display:flex; gap:10px; flex-wrap:wrap; margin:8px 0;">';
+  function maxGamesSet(formatoSet) {
+    // "Sets a 6 games" admite tiebreak (7-6); el resto de formatos no.
+    return formatoSet === '6' ? 7 : parseInt(formatoSet, 10);
+  }
+
+  function generarSelectGames(id, valorActual, maxValor) {
+    let html = `<select id="${id}" style="width:56px; text-align:center; padding:8px 2px;">`;
+    html += `<option value="">-</option>`;
+    for (let v = 0; v <= maxValor; v++) {
+      const sel = (valorActual !== '' && valorActual === v) ? ' selected' : '';
+      html += `<option value="${v}"${sel}>${v}</option>`;
+    }
+    html += `</select>`;
+    return html;
+  }
+
+  function renderSetsInputsHtml(idBase, sets, maxValor) {
+    let header = '<div style="display:flex; gap:10px; margin-top:8px;">';
+    let fila1 = '<div style="display:flex; gap:10px; margin-bottom:2px;">';
+    let fila2 = '<div style="display:flex; gap:10px;">';
+
     for (let s = 0; s < 4; s++) {
       const val = (sets && sets[s]) ? sets[s] : null;
       const v1 = val ? val.g1 : '';
       const v2 = val ? val.g2 : '';
-      html += `<div style="text-align:center;">
-        <div style="font-size:12px; color:var(--gris); margin-bottom:2px;">Set ${s + 1}</div>
-        <div style="display:flex; align-items:center; gap:4px;">
-          <input type="number" min="1" max="7" id="${idBase}_s${s}_g1" value="${v1}" style="width:42px; text-align:center;">
-          <span>-</span>
-          <input type="number" min="1" max="7" id="${idBase}_s${s}_g2" value="${v2}" style="width:42px; text-align:center;">
-        </div>
-      </div>`;
+
+      header += `<div style="width:56px; text-align:center; font-size:12px; color:var(--gris);">Set ${s + 1}</div>`;
+      fila1 += `<div style="width:56px;">${generarSelectGames(`${idBase}_s${s}_g1`, v1, maxValor)}</div>`;
+      fila2 += `<div style="width:56px;">${generarSelectGames(`${idBase}_s${s}_g2`, v2, maxValor)}</div>`;
     }
-    html += '</div>';
-    return html;
+
+    header += '</div>';
+    fila1 += '</div>';
+    fila2 += '</div>';
+    return header + fila1 + fila2;
   }
 
   function renderCruceCard(c, etiqueta1, etiqueta2, ruta) {
@@ -1926,7 +1944,7 @@
         </div>`;
       }
     } else {
-      cuerpo = renderSetsInputsHtml(idBase, r.sets)
+      cuerpo = renderSetsInputsHtml(idBase, r.sets, maxGamesSet(sorteoExistente.formatoSet))
         + `<button class="btn-primary" onclick="cargarResultadoCruce('${ruta}')">Cargar resultado</button>`;
     }
 
@@ -1993,6 +2011,7 @@
 
   async function cargarResultadoCruce(ruta) {
     const idBase = rutaToId(ruta);
+    const maxValor = maxGamesSet(sorteoExistente.formatoSet);
     const sets = [];
     for (let s = 0; s < 4; s++) {
       const v1raw = document.getElementById(`${idBase}_s${s}_g1`).value;
@@ -2001,10 +2020,14 @@
         sets.push(null);
         continue;
       }
+      if (v1raw === '' || v2raw === '') {
+        alert(`Completá los dos valores del Set ${s + 1}, o dejalo vacío si no se jugó.`);
+        return;
+      }
       const g1 = parseInt(v1raw, 10);
       const g2 = parseInt(v2raw, 10);
-      if (isNaN(g1) || isNaN(g2) || g1 < 1 || g1 > 7 || g2 < 1 || g2 > 7) {
-        alert(`El Set ${s + 1} debe tener un valor entre 1 y 7 para ambos equipos (o dejarlo vacío si no se jugó).`);
+      if (isNaN(g1) || isNaN(g2) || g1 < 0 || g1 > maxValor || g2 < 0 || g2 > maxValor) {
+        alert(`El Set ${s + 1} debe tener valores entre 0 y ${maxValor}.`);
         return;
       }
       sets.push({ g1, g2 });
