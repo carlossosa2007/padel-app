@@ -159,7 +159,7 @@
     </div>
 
     <label>Hora de juego</label>
-    <input type="time" id="horaTorneo">
+    <input type="time" id="horaTorneo" step="60">
 
     <label>Club frecuente</label>
     <input type="text" id="clubTorneo" placeholder="Nombre del club">
@@ -197,6 +197,8 @@
       <p style="margin:0;"><strong>Hora de juego:</strong> <span id="detalleHora"></span></p>
     </div>
 
+    <button class="btn-secondary" onclick="abrirEditarTorneo()">Editar información del torneo</button>
+
     <label>Asistencia de hoy</label>
     <div id="listaConfirmados" style="display:flex; flex-direction:column; gap:6px;"></div>
 
@@ -206,6 +208,31 @@
     <div id="listaNoConfirmados" style="display:flex; flex-direction:column; gap:6px;"></div>
 
     <button class="btn-secondary" id="btnVerTorneo" onclick="abrirVerTorneo()" style="display:none;">Ver torneo</button>
+  </div>
+
+  <!-- PANTALLA EDITAR INFORMACIÓN DEL TORNEO -->
+  <div class="screen" id="screen-editar-torneo">
+    <button class="btn-volver" onclick="goTo('screen-detalle-torneo')">&larr; Volver</button>
+    <h3>Editar información del torneo</h3>
+
+    <label>Días más frecuentes de juego</label>
+    <div class="chips" id="diasEditar">
+      <div class="chip" onclick="toggleChip(this)">Lunes</div>
+      <div class="chip" onclick="toggleChip(this)">Martes</div>
+      <div class="chip" onclick="toggleChip(this)">Miércoles</div>
+      <div class="chip" onclick="toggleChip(this)">Jueves</div>
+      <div class="chip" onclick="toggleChip(this)">Viernes</div>
+      <div class="chip" onclick="toggleChip(this)">Sábado</div>
+      <div class="chip" onclick="toggleChip(this)">Domingo</div>
+    </div>
+
+    <label>Hora de juego</label>
+    <input type="time" id="horaEditar" step="60">
+
+    <label>Club frecuente</label>
+    <input type="text" id="clubEditar" placeholder="Nombre del club">
+
+    <button class="btn-primary" onclick="guardarEdicionTorneo()">Guardar cambios</button>
   </div>
 
   <!-- PANTALLA JORNADA: bolsa de jugadores -->
@@ -532,13 +559,49 @@
     const torneo = torneoSnap.data();
     torneoInfo = torneo;
     document.getElementById('tituloDetalleTorneo').textContent = 'Torneo: ' + torneo.nombre;
-    document.getElementById('detalleCodigo').textContent = torneo.codigo;
-    document.getElementById('detalleClub').textContent = torneo.club || 'Sin definir';
-    document.getElementById('detalleDias').textContent = (torneo.dias && torneo.dias.length > 0) ? torneo.dias.join(', ') : 'Sin definir';
-    document.getElementById('detalleHora').textContent = torneo.hora || 'Sin definir';
+    renderDetalleInfo();
     torneoJugadores = torneo.jugadores || [];
 
     await renderConfirmados(codigo);
+    goTo('screen-detalle-torneo');
+  }
+
+  function renderDetalleInfo() {
+    document.getElementById('detalleCodigo').textContent = torneoInfo.codigo;
+    document.getElementById('detalleClub').textContent = torneoInfo.club || 'Sin definir';
+    document.getElementById('detalleDias').textContent = (torneoInfo.dias && torneoInfo.dias.length > 0) ? torneoInfo.dias.join(', ') : 'Sin definir';
+    document.getElementById('detalleHora').textContent = torneoInfo.hora || 'Sin definir';
+  }
+
+  function abrirEditarTorneo() {
+    // Pre-cargar días seleccionados
+    [...document.querySelectorAll('#diasEditar .chip')].forEach(c => {
+      c.classList.toggle('selected', (torneoInfo.dias || []).includes(c.textContent));
+    });
+    document.getElementById('horaEditar').value = torneoInfo.hora || '';
+    document.getElementById('clubEditar').value = torneoInfo.club || '';
+    goTo('screen-editar-torneo');
+  }
+
+  async function guardarEdicionTorneo() {
+    const codigo = localStorage.getItem('torneoSeleccionado');
+    const diasSeleccionados = [...document.querySelectorAll('#diasEditar .chip.selected')]
+      .map(c => c.textContent);
+    const hora = document.getElementById('horaEditar').value || '';
+    const club = document.getElementById('clubEditar').value.trim() || '';
+
+    try {
+      await setDoc(doc(db, 'torneos', codigo), { dias: diasSeleccionados, hora: hora, club: club }, { merge: true });
+    } catch (e) {
+      alert('No se pudo guardar la información: ' + e.message);
+      return;
+    }
+
+    torneoInfo.dias = diasSeleccionados;
+    torneoInfo.hora = hora;
+    torneoInfo.club = club;
+    renderDetalleInfo();
+
     goTo('screen-detalle-torneo');
   }
 
@@ -576,7 +639,7 @@
       btn.disabled = false;
     }
 
-    document.getElementById('btnVerTorneo').style.display = confirmados.length > 0 ? 'block' : 'none';
+    document.getElementById('btnVerTorneo').style.display = 'block';
   }
 
   async function confirmarAsistencia() {
@@ -1651,6 +1714,8 @@
   window.compartirTorneo = compartirTorneo;
   window.abrirMisTorneos = abrirMisTorneos;
   window.abrirVerTorneo = abrirVerTorneo;
+  window.abrirEditarTorneo = abrirEditarTorneo;
+  window.guardarEdicionTorneo = guardarEdicionTorneo;
   window.irASorteo = irASorteo;
   window.abrirUnirse = abrirUnirse;
   window.buscarTorneo = buscarTorneo;
