@@ -164,6 +164,11 @@
     <label>Club frecuente</label>
     <input type="text" id="clubTorneo" placeholder="Nombre del club">
 
+    <label style="display:flex; align-items:center; gap:8px; cursor:pointer;">
+      <input type="checkbox" id="torneoPrivado" style="width:20px; height:20px;">
+      Torneo privado (seré siempre el administrador, salvo que elija un reemplazo)
+    </label>
+
     <button class="btn-primary" onclick="crearTorneo()">Crear torneo</button>
   </div>
 
@@ -485,6 +490,8 @@
       dias: diasSeleccionados,
       hora: document.getElementById('horaTorneo').value || '',
       club: document.getElementById('clubTorneo').value.trim() || '',
+      privado: document.getElementById('torneoPrivado').checked,
+      creador: miNombre,
       codigo: codigo,
       jugadores: [miNombre]
     };
@@ -702,6 +709,21 @@
     adminDoc = adminSnap.exists() ? adminSnap.data() : { propuestas: {}, confirmado: null };
     adminHoy = adminDoc.confirmado || null;
 
+    // Torneo privado: el creador es admin por defecto si está confirmado y no hay admin definido
+    const creador = torneoInfo ? (torneoInfo.creador || (torneoInfo.jugadores && torneoInfo.jugadores[0])) : null;
+    if (!adminHoy && torneoInfo && torneoInfo.privado && creador) {
+      const creadorConfirmado = confirmadosData.some(j => j.nombre === creador);
+      if (creadorConfirmado) {
+        adminHoy = creador;
+        adminDoc.confirmado = creador;
+        try {
+          await setDoc(doc(db, 'torneos', codigo, 'admins', fecha), { confirmado: creador }, { merge: true });
+        } catch (e) {
+          // si falla, igual seguimos mostrando al creador como admin localmente
+        }
+      }
+    }
+
     if (sorteoExistente) {
       // Restaurar pistas/formato usados en el sorteo guardado
       valores.pistasHoy = sorteoExistente.pistas;
@@ -806,6 +828,9 @@
     }
 
     // Soy el administrador y todavía no hay sorteo válido: panel completo
+    const creador = torneoInfo ? (torneoInfo.creador || (torneoInfo.jugadores && torneoInfo.jugadores[0])) : null;
+    const puedeReasignar = torneoInfo && torneoInfo.privado && miNombre === creador;
+
     cont.innerHTML = `
       <p style="background:var(--verde-claro); color:var(--verde); padding:10px; border-radius:8px;">👑 Sos el administrador de hoy</p>
 
@@ -827,7 +852,8 @@
       <div style="display:flex; gap:10px;">
         <button class="btn-primary" style="flex:1;" onclick="abrirArmarParejas()">Armar parejas</button>
         <button class="btn-primary" style="flex:1;" onclick="irASorteo()">Sortear parejas</button>
-      </div>`;
+      </div>
+      ${puedeReasignar ? `<button class="btn-secondary" onclick="abrirElegirAdmin()">Elegir otro administrador</button>` : ''}`;
 
     document.getElementById('formatoSetHoy').value = valores.formatoSetHoy;
   }
@@ -858,6 +884,10 @@
   // ---- ELEGIR ADMINISTRADOR DEL DÍA ----
 
   function abrirElegirAdmin() {
+    if (confirmadosData.length === 0) {
+      alert('Todavía no hay jugadores confirmados, no se puede elegir un administrador.');
+      return;
+    }
     renderElegirAdmin();
     goTo('screen-elegir-admin');
   }
@@ -905,8 +935,16 @@
     const conteo = Object.values(propuestas).filter(p => p === propuesto).length;
     const umbral = confirmadosData.length <= 2 ? 1 : 2;
 
+    const creador = torneoInfo ? (torneoInfo.creador || (torneoInfo.jugadores && torneoInfo.jugadores[0])) : null;
+    const esCreadorPrivado = torneoInfo && torneoInfo.privado && miNombre === creador;
+
     let confirmado = adminDoc.confirmado || null;
-    if (!confirmado && conteo >= umbral) confirmado = propuesto;
+    if (esCreadorPrivado) {
+      // En torneo privado, el creador define el administrador sin necesitar votos
+      confirmado = propuesto;
+    } else if (!confirmado && conteo >= umbral) {
+      confirmado = propuesto;
+    }
 
     try {
       await setDoc(doc(db, 'torneos', codigo, 'admins', fecha), {
@@ -978,6 +1016,15 @@
     if (!confirm(mensaje)) return;
 
     await setDoc(ref, { confirmados: arrayRemove(miNombre) }, { merge: true });
+
+    // Si quien se retira era el administrador de hoy, el cargo queda vacante
+    if (adminHoy === miNombre) {
+      const adminRef = doc(db, 'torneos', codigo, 'admins', fecha);
+      await setDoc(adminRef, { confirmado: null, propuestas: {} }, { merge: true });
+      adminHoy = null;
+      adminDoc.confirmado = null;
+      adminDoc.propuestas = {};
+    }
 
     await renderConfirmados(codigo);
     goTo('screen-detalle-torneo');
