@@ -290,8 +290,10 @@
     <div id="seccionCruces" style="display:none;">
       <label>Parejas y cruces iniciales</label>
       <div id="crucesGuardadosView"></div>
-      <button class="btn-secondary" onclick="compartirCruces()">Compartir cruces</button>
+      <button class="btn-secondary" id="btnCompartirCruces" onclick="compartirCruces()">Compartir cruces</button>
       <button class="btn-primary" id="btnAnotarResultados" onclick="abrirResultados()">Anotar resultados</button>
+      <button class="btn-secondary" id="btnCompartirResultados" onclick="compartirResultados()" style="display:none;">Compartir resultados</button>
+      <button class="btn-primary" id="btnCerrarJornada" onclick="cerrarJornada()" style="display:none;">Cerrar jornada del día</button>
 
       <div id="seccionCuestionamiento"></div>
     </div>
@@ -967,7 +969,9 @@
   function renderBannerSorteo() {
     const banner = document.getElementById('bannerJornada');
 
-    if (sorteoValido) {
+    if (sorteoExistente && sorteoExistente.cerrada) {
+      banner.innerHTML = `<p style="background:var(--verde-claro); color:var(--verde); padding:10px; border-radius:8px;">✅ La jornada de hoy finalizó con los resultados confirmados. ¡Nos vemos la próxima semana!</p>`;
+    } else if (sorteoValido) {
       banner.innerHTML = `<p style="background:var(--verde-claro); color:var(--verde); padding:10px; border-radius:8px;">✅ El sorteo de hoy ya fue realizado por <strong>${sorteoExistente.autor}</strong>. Las parejas y cruces son definitivos.</p>`;
     } else if (sorteoExistente && sorteoExistente.invalidado) {
       const solicitante = sorteoExistente.cuestionamiento ? sorteoExistente.cuestionamiento.solicitante : '';
@@ -981,39 +985,60 @@
 
   function actualizarVistaSorteo() {
     const seccionCruces = document.getElementById('seccionCruces');
+    const cerrada = !!(sorteoExistente && sorteoExistente.cerrada);
+    const mostrarCruces = sorteoValido || cerrada;
 
     // Pistas y formato: solo se muestran si hay administrador (o ya hay sorteo), porque las define el admin
-    const mostrarPistasFormato = !!adminHoy || sorteoValido;
+    const mostrarPistasFormato = !!adminHoy || mostrarCruces;
     document.getElementById('filaInfoPistas').style.display = mostrarPistasFormato ? 'block' : 'none';
     document.getElementById('filaInfoFormato').style.display = mostrarPistasFormato ? 'block' : 'none';
 
     if (mostrarPistasFormato) {
-      const pistasMostrar = sorteoValido ? sorteoExistente.pistas : valores.pistasHoy;
-      const formatoMostrar = sorteoValido ? sorteoExistente.formatoSet : valores.formatoSetHoy;
+      const pistasMostrar = mostrarCruces ? sorteoExistente.pistas : valores.pistasHoy;
+      const formatoMostrar = mostrarCruces ? sorteoExistente.formatoSet : valores.formatoSetHoy;
       document.getElementById('infoPistas').textContent = pistasMostrar;
       document.getElementById('infoFormato').textContent = 'Sets a ' + formatoMostrar + ' games';
     }
 
-    if (sorteoValido) {
+    if (mostrarCruces) {
       seccionCruces.style.display = 'flex';
       seccionCruces.style.flexDirection = 'column';
       seccionCruces.style.gap = '10px';
       renderCrucesGuardados();
-      renderCuestionamiento();
-      document.getElementById('btnAnotarResultados').textContent = hayResultadosCargados() ? 'Ver resultados del día' : 'Anotar resultados';
+
+      if (cerrada) {
+        document.getElementById('seccionCuestionamiento').innerHTML = '';
+        document.getElementById('btnCompartirCruces').style.display = 'none';
+        document.getElementById('btnAnotarResultados').textContent = 'Ver resultados del día';
+        document.getElementById('btnCompartirResultados').style.display = 'block';
+        document.getElementById('btnCerrarJornada').style.display = 'none';
+      } else {
+        renderCuestionamiento();
+        document.getElementById('btnCompartirCruces').style.display = 'block';
+        document.getElementById('btnAnotarResultados').textContent = hayResultadosCargados() ? 'Ver resultados del día' : 'Anotar resultados';
+        document.getElementById('btnCompartirResultados').style.display = 'none';
+        document.getElementById('btnCerrarJornada').style.display = jornadaFinalizada() ? 'block' : 'none';
+      }
     } else {
       seccionCruces.style.display = 'none';
     }
 
     const miNombre = localStorage.getItem('miNombre');
     const estoyConfirmado = confirmadosData.some(j => j.nombre === miNombre);
-    document.getElementById('btnRetirarInscripcion').style.display = estoyConfirmado ? 'block' : 'none';
+    document.getElementById('btnRetirarInscripcion').style.display = (estoyConfirmado && !cerrada) ? 'block' : 'none';
   }
 
   function renderSeccionAdmin() {
     const cont = document.getElementById('seccionAdmin');
     const miNombre = localStorage.getItem('miNombre');
     const estoyConfirmado = confirmadosData.some(j => j.nombre === miNombre);
+
+    if (sorteoExistente && sorteoExistente.cerrada) {
+      cont.innerHTML = adminHoy
+        ? `<p style="background:var(--verde-claro); color:var(--verde); padding:10px; border-radius:8px;">👑 Administrador de hoy: <strong>${adminHoy}</strong></p>`
+        : '';
+      return;
+    }
 
     if (!adminHoy) {
       let html = `<p style="color:var(--gris);">Todavía no se eligió administrador para hoy.</p>`;
@@ -1257,6 +1282,11 @@
     const adminSnap = await getDoc(doc(db, 'torneos', codigo, 'admins', fecha));
     const adminActual = adminSnap.exists() ? adminSnap.data() : { propuestas: {}, confirmado: null };
     const adminActualNombre = adminActual.confirmado || null;
+
+    if (sorteoActual && sorteoActual.cerrada) {
+      alert('La jornada de hoy ya finalizó con los resultados confirmados. No se puede retirar la inscripción — nos vemos la próxima semana.');
+      return;
+    }
 
     let mensaje = '¿Confirmás que querés retirar tu inscripción para hoy?';
     if (sorteoActual) {
@@ -1823,6 +1853,78 @@
       ...((sorteoExistente.rondasExtra || []).flatMap(r => r.cruces))
     ];
     return todosLosCruces.some(c => c.resultado && c.resultado.estado !== 'pendiente');
+  }
+
+  // La jornada se considera finalizada cuando todos los cruces jugables (con 2 parejas)
+  // tienen su resultado confirmado, o cargado y firme por haber pasado 12hs.
+  function jornadaFinalizada() {
+    if (!sorteoExistente) return false;
+    const todosLosCruces = [
+      ...sorteoExistente.cruces,
+      ...((sorteoExistente.rondasExtra || []).flatMap(r => r.cruces))
+    ].filter(c => c.pareja2);
+
+    if (todosLosCruces.length === 0) return false;
+
+    return todosLosCruces.every(c => {
+      const r = c.resultado;
+      if (!r) return false;
+      if (r.estado === 'confirmado') return true;
+      if (r.estado === 'cargado' && r.fechaCarga && (Date.now() - new Date(r.fechaCarga).getTime() > DOCE_HS_MS)) return true;
+      return false;
+    });
+  }
+
+  async function cerrarJornada() {
+    if (!jornadaFinalizada()) {
+      alert('Todavía hay resultados sin confirmar. Esperá a que todos estén confirmados (o queden firmes a las 12hs) antes de cerrar la jornada.');
+      return;
+    }
+    if (!confirm('¿Cerrar la jornada de hoy?\n\nUna vez cerrada: ya no se podrá retirar la inscripción, cuestionar el sorteo ni compartir los cruces — solo ver y compartir los resultados. La próxima semana se podrá volver a inscribirse y elegir administrador normalmente.')) return;
+
+    const codigo = localStorage.getItem('torneoSeleccionado');
+    const fecha = fechaHoy();
+    try {
+      await setDoc(doc(db, 'torneos', codigo, 'sorteos', fecha), { cerrada: true }, { merge: true });
+    } catch (e) {
+      alert('No se pudo cerrar la jornada: ' + e.message);
+      return;
+    }
+    sorteoExistente.cerrada = true;
+    recalcularValidezSorteo();
+  }
+
+  function generarTextoResultados() {
+    const equipos = calcularEquipos();
+    const usarEq = usarEquipos();
+    let texto = '🎾 Resultados de hoy\n';
+
+    function agregarCruce(c, etiquetaRonda) {
+      if (!c.pareja2) return;
+      const n1 = numeroEquipo(c.pareja1, equipos);
+      const n2 = numeroEquipo(c.pareja2, equipos);
+      const letra1 = letraEquipo(n1);
+      const letra2 = letraEquipo(n2);
+      const nom1 = usarEq ? `Equipo ${n1} (${letra1}): ${nombrePareja(c.pareja1)}` : `${letra1}: ${nombrePareja(c.pareja1)}`;
+      const nom2 = usarEq ? `Equipo ${n2} (${letra2}): ${nombrePareja(c.pareja2)}` : `${letra2}: ${nombrePareja(c.pareja2)}`;
+      texto += `\n${etiquetaRonda}\n${nom1}\nvs\n${nom2}\n`;
+      const sets = (c.resultado && c.resultado.sets) || [];
+      const setsTxt = sets.filter(s => s).map(s => `${s.g1}-${s.g2}`).join(', ');
+      texto += `Resultado: ${setsTxt || 'sin cargar'}\n`;
+    }
+
+    sorteoExistente.cruces.forEach(c => agregarCruce(c, usarEq ? 'Ronda 1' : 'Resultado'));
+    (sorteoExistente.rondasExtra || []).forEach((ronda, ri) => {
+      ronda.cruces.forEach(c => agregarCruce(c, `Ronda ${ri + 2}`));
+    });
+
+    return texto;
+  }
+
+  function compartirResultados() {
+    const texto = generarTextoResultados();
+    const url = `https://wa.me/?text=${encodeURIComponent(texto)}`;
+    window.open(url, '_blank');
   }
 
   function abrirResultados() {
@@ -2413,6 +2515,8 @@
   window.confirmarAsistencia = confirmarAsistencia;
   window.retirarInscripcion = retirarInscripcion;
   window.compartirCruces = compartirCruces;
+  window.cerrarJornada = cerrarJornada;
+  window.compartirResultados = compartirResultados;
   window.cuestionarSorteo = cuestionarSorteo;
   window.votarCuestionamiento = votarCuestionamiento;
   window.abrirElegirAdmin = abrirElegirAdmin;
