@@ -138,7 +138,7 @@
   <!-- PANTALLA INICIO -->
   <div class="screen active" id="screen-inicio">
     <button class="btn-primary" onclick="verificarPerfilParaCrear()">Crear torneo</button>
-    <button class="btn-secondary" onclick="abrirUnirse()">Unirse a torneo</button>
+    <button class="btn-secondary" onclick="abrirUnirse()">Unirme a torneo</button>
     <button class="btn-secondary" onclick="abrirMisTorneos()">Mis torneos</button>
     <button class="btn-secondary" onclick="alert('Próximamente: ver estadísticas')">Ver estadísticas</button>
     <button class="btn-secondary" onclick="abrirPerfil()">Mi Perfil</button>
@@ -365,7 +365,7 @@
   <!-- PANTALLA ANOTAR RESULTADOS -->
   <div class="screen" id="screen-resultados">
     <button class="btn-volver" onclick="goTo('screen-jornada')">&larr; Volver</button>
-    <p class="torneo-breadcrumb" id="tituloResultados"></p>
+    <h3 id="tituloResultados" style="margin-bottom:0;"></h3>
     <h3>Resultados de hoy</h3>
     <p style="color:var(--gris); margin-top:-10px;">Formato: sets a <span id="formatoResultados"></span> games</p>
 
@@ -400,7 +400,7 @@
   <!-- PANTALLA UNIRSE A TORNEO -->
   <div class="screen" id="screen-unirse">
     <button class="btn-volver" onclick="goTo('screen-inicio')">&larr; Volver</button>
-    <h3>Unirse a torneo</h3>
+    <h3>Unirme a torneo</h3>
 
     <label>Código del torneo (4 letras)</label>
     <input type="text" id="codigoUnirse" maxlength="4" style="text-transform:uppercase; letter-spacing:4px; font-size:20px;" placeholder="ABCD">
@@ -514,7 +514,7 @@
   function verificarPerfilParaCrear() {
     const miNombre = localStorage.getItem('miNombre');
     if (!miNombre) {
-      alert('Para crear un torneo, primero tenés que crear tu perfil. Tocá "Mi Perfil" en el menú principal.');
+      alert('Por favor, cargá tu perfil de jugador para habilitar estas funciones. Tocá "Mi Perfil" en el menú principal.');
       return;
     }
     goTo('screen-crear');
@@ -2424,7 +2424,7 @@
   async function abrirUnirse() {
     const miNombre = localStorage.getItem('miNombre');
     if (!miNombre) {
-      alert('Primero completá tu perfil en "Mi Perfil" antes de unirte a un torneo.');
+      alert('Por favor, cargá tu perfil de jugador para habilitar estas funciones. Tocá "Mi Perfil" en el menú principal.');
       return;
     }
     document.getElementById('codigoUnirse').value = '';
@@ -2440,7 +2440,7 @@
 
     const torneoSnap = await getDoc(doc(db, 'torneos', codigo));
     if (!torneoSnap.exists()) {
-      alert('No se encontró ningún torneo con ese código.');
+      alert('Torneo no encontrado.\n\nPor favor, revisá el código e intentá nuevamente.');
       return;
     }
     const torneo = torneoSnap.data();
