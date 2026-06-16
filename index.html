@@ -293,15 +293,34 @@
       <button class="btn-secondary" id="btnCompartirCruces" onclick="compartirCruces()">Compartir cruces</button>
       <button class="btn-primary" id="btnAnotarResultados" onclick="abrirResultados()">Anotar resultados</button>
       <button class="btn-secondary" id="btnCompartirResultados" onclick="compartirResultados()" style="display:none;">Compartir resultados</button>
-      <button class="btn-primary" id="btnCerrarJornada" onclick="cerrarJornada()" style="display:none;">Cerrar jornada del día</button>
+      <button class="btn-primary" id="btnCerrarJornada" onclick="cerrarJornada()" style="display:none;">Cerrar fecha</button>
 
       <div id="seccionCuestionamiento"></div>
     </div>
 
     <button class="btn-secondary" id="btnRetirarInscripcion" onclick="retirarInscripcion()">Retirar mi inscripción</button>
+    <button class="btn-secondary" onclick="abrirHistorialFechas()">Ver fechas anteriores</button>
     <button class="btn-secondary" onclick="alert('Próximamente: estadísticas del torneo')">Ver estadísticas del torneo</button>
-    <button class="btn-secondary" onclick="alert('Próximamente: estadísticas de jugador')">Ver estadísticas de jugador</button>
-    <button class="btn-secondary" onclick="alert('Próximamente: mis estadísticas')">Mis estadísticas</button>
+    <button class="btn-secondary" onclick="abrirMisEstadisticas()">Mis estadísticas</button>
+  </div>
+
+  <!-- PANTALLA HISTORIAL DE FECHAS -->
+  <div class="screen" id="screen-historial">
+    <button class="btn-volver" onclick="goTo('screen-jornada')">&larr; Volver</button>
+    <p class="torneo-breadcrumb" id="tituloHistorial"></p>
+    <h3>Fechas anteriores</h3>
+    <div id="listaHistorial" style="display:flex; flex-direction:column; gap:10px;"></div>
+  </div>
+
+  <!-- PANTALLA DETALLE DE FECHA ANTERIOR -->
+  <div class="screen" id="screen-fecha-detalle">
+    <button class="btn-volver" onclick="goTo('screen-historial')">&larr; Volver</button>
+    <p class="torneo-breadcrumb" id="tituloFechaDetalle"></p>
+    <h3 id="subtituloFechaDetalle"></h3>
+
+    <div id="resumenFechaDetalle" style="display:flex; flex-direction:column; gap:8px;"></div>
+    <div id="crucesDetalleFecha" style="display:flex; flex-direction:column; gap:10px; margin-top:8px;"></div>
+    <button class="btn-secondary" onclick="compartirResultadosFecha()">Compartir resultados</button>
   </div>
 
   <!-- PANTALLA ELEGIR ADMINISTRADOR -->
@@ -1915,7 +1934,7 @@
       alert('Todavía hay resultados sin confirmar. Esperá a que todos estén confirmados (o queden firmes a las 12hs) antes de cerrar la jornada.');
       return;
     }
-    if (!confirm('¿Cerrar la jornada de hoy?\n\nUna vez cerrada: ya no se podrá retirar la inscripción, cuestionar el sorteo ni compartir los cruces — solo ver y compartir los resultados. La próxima semana se podrá volver a inscribirse y elegir administrador normalmente.')) return;
+    if (!confirm('¿Cerrar esta fecha?\n\nUna vez cerrada: los jugadores deberán inscribirse nuevamente la próxima fecha, habrá que elegir nuevo administrador y generar nuevo sorteo. Los resultados de hoy quedan guardados en el historial para verlos siempre.')) return;
 
     const codigo = localStorage.getItem('torneoSeleccionado');
     const fecha = fechaHoy();
@@ -1960,6 +1979,130 @@
     const texto = generarTextoResultados();
     const url = `https://wa.me/?text=${encodeURIComponent(texto)}`;
     window.open(url, '_blank');
+  }
+
+
+  // ---- HISTORIAL DE FECHAS ANTERIORES ----
+
+  let sorteoHistorial = null;
+
+  async function abrirHistorialFechas() {
+    const codigo = localStorage.getItem('torneoSeleccionado');
+    document.getElementById('tituloHistorial').textContent = tituloTorneoTexto();
+    document.getElementById('listaHistorial').innerHTML = '<p style="color:var(--gris);">Cargando...</p>';
+    goTo('screen-historial');
+
+    const sorteosSnap = await getDocs(collection(db, 'torneos', codigo, 'sorteos'));
+    const fechas = sorteosSnap.docs
+      .filter(d => d.data().cerrada)
+      .map(d => ({ fecha: d.id, sorteo: d.data() }))
+      .sort((a, b) => b.fecha.localeCompare(a.fecha));
+
+    if (fechas.length === 0) {
+      document.getElementById('listaHistorial').innerHTML =
+        '<p style="color:var(--gris);">Todavía no hay fechas cerradas en este torneo.</p>';
+      return;
+    }
+
+    document.getElementById('listaHistorial').innerHTML = fechas.map(({ fecha, sorteo }) => {
+      const [anio, mes, dia] = fecha.split('-');
+      const etiqueta = dia + '/' + mes + '/' + anio;
+      const jugados = (sorteo.cruces || []).filter(c => c.pareja2 && c.resultado && c.resultado.estado === 'confirmado').length;
+      return '<div style="border:1px solid #ddd; border-radius:8px; padding:12px; display:flex; justify-content:space-between; align-items:center;">'
+        + '<div><p style="margin:0; font-weight:bold;">📅 ' + etiqueta + '</p>'
+        + '<p style="margin:0; color:var(--gris); font-size:14px;">' + jugados + ' cruce(s) confirmado(s)</p></div>'
+        + '<button class="btn-secondary" style="width:auto; padding:8px 16px;" onclick="abrirDetalleFecha(\'' + fecha + '\')">Ver</button>'
+        + '</div>';
+    }).join('');
+  }
+
+  async function abrirDetalleFecha(fecha) {
+    const codigo = localStorage.getItem('torneoSeleccionado');
+    const snap = await getDoc(doc(db, 'torneos', codigo, 'sorteos', fecha));
+    if (!snap.exists()) return;
+    sorteoHistorial = snap.data();
+    const partes = fecha.split('-');
+    const etiqueta = partes[2] + '/' + partes[1] + '/' + partes[0];
+    document.getElementById('tituloFechaDetalle').textContent = tituloTorneoTexto();
+    document.getElementById('subtituloFechaDetalle').textContent = 'Fecha ' + etiqueta;
+
+    const sorteoGuardado = sorteoExistente;
+    sorteoExistente = sorteoHistorial;
+    const equipos = calcularEquipos();
+    const usarEq = usarEquipos();
+    const stats = calcularEstadisticasDia();
+    const letras = Object.keys(stats).sort((a, b) => {
+      const sa = stats[a], sb = stats[b];
+      return sb.setsGanados !== sa.setsGanados
+        ? sb.setsGanados - sa.setsGanados
+        : (sb.gamesPropios - sb.gamesRivales) - (sa.gamesPropios - sa.gamesRivales);
+    });
+
+    let resumenHtml = '';
+    if (letras.length > 0 && stats[letras[0]].setsGanados > 0) {
+      const ganadora = letras[0];
+      const perdedora = letras[letras.length - 1];
+      resumenHtml += '<div style="border:2px solid var(--verde); border-radius:8px; padding:12px; background:var(--verde-claro);">'
+        + '<p style="margin:0 0 4px 0; color:var(--verde); font-weight:bold;">🏆 Pareja ganadora:</p>'
+        + '<p style="margin:0; font-weight:bold;">' + ganadora + ': ' + stats[ganadora].nombre + '</p></div>';
+      if (letras.length > 1) {
+        resumenHtml += '<div style="border:1px solid #ddd; border-radius:8px; padding:12px;">'
+          + '<p style="margin:0 0 4px 0; color:var(--naranja); font-weight:bold;">🥴 Pareja perdedora (Los grandes derrotados):</p>'
+          + '<p style="margin:0; font-weight:bold;">' + perdedora + ': ' + stats[perdedora].nombre + '</p></div>';
+      }
+      letras.forEach(function(letra) {
+        const s = stats[letra];
+        resumenHtml += '<div style="border:1px solid #ddd; border-radius:8px; padding:10px;">'
+          + '<p style="margin:0 0 2px 0; font-weight:bold;">Pareja ' + letra + ': ' + s.nombre + '</p>'
+          + '<p style="margin:0; color:var(--gris); font-size:14px;">Sets ganados: ' + s.setsGanados
+          + ' | Games ganados: ' + s.gamesPropios + ' | Games perdidos: ' + s.gamesRivales + '</p></div>';
+      });
+    } else {
+      resumenHtml = '<p style="color:var(--gris);">Sin resultados confirmados en esta fecha.</p>';
+    }
+    document.getElementById('resumenFechaDetalle').innerHTML = resumenHtml;
+
+    const todosLosCruces = (sorteoHistorial.cruces || []).concat(
+      (sorteoHistorial.rondasExtra || []).flatMap(function(r, ri) {
+        return r.cruces.map(function(c) { return Object.assign({}, c, { _ronda: ri + 2 }); });
+      })
+    );
+    let crucesHtml = usarEq ? '<h4 style="margin-bottom:4px;">Ronda 1</h4>' : '';
+    let rondaActual = 1;
+    todosLosCruces.forEach(function(c) {
+      const ronda = c._ronda || 1;
+      if (usarEq && ronda !== rondaActual) {
+        rondaActual = ronda;
+        crucesHtml += '<h4 style="margin-bottom:4px;">Ronda ' + ronda + '</h4>';
+      }
+      if (!c.pareja2) return;
+      const n1 = numeroEquipo(c.pareja1, equipos);
+      const n2 = numeroEquipo(c.pareja2, equipos);
+      const l1 = letraEquipo(n1);
+      const l2 = letraEquipo(n2);
+      const r = c.resultado;
+      const setsStr = r && r.sets
+        ? r.sets.filter(function(s) { return s; }).map(function(s) { return s.g1 + '-' + s.g2; }).join(', ')
+        : 'sin resultado';
+      crucesHtml += '<div style="border:1px solid #ddd; border-radius:8px; padding:10px;">'
+        + '<p style="margin:0 0 4px 0;"><strong>' + l1 + ':</strong> ' + nombrePareja(c.pareja1) + '</p>'
+        + '<p style="margin:0 0 4px 0; color:var(--naranja); font-weight:bold;">vs</p>'
+        + '<p style="margin:0 0 6px 0;"><strong>' + l2 + ':</strong> ' + nombrePareja(c.pareja2) + '</p>'
+        + '<p style="margin:0; color:var(--gris);">Resultado: ' + setsStr + '</p></div>';
+    });
+    document.getElementById('crucesDetalleFecha').innerHTML = crucesHtml || '<p style="color:var(--gris);">Sin cruces.</p>';
+
+    sorteoExistente = sorteoGuardado;
+    goTo('screen-fecha-detalle');
+  }
+
+  function compartirResultadosFecha() {
+    if (!sorteoHistorial) return;
+    const sorteoGuardado = sorteoExistente;
+    sorteoExistente = sorteoHistorial;
+    const texto = generarTextoResultados();
+    sorteoExistente = sorteoGuardado;
+    window.open('https://wa.me/?text=' + encodeURIComponent(texto), '_blank');
   }
 
   function abrirResultados() {
@@ -2182,6 +2325,9 @@
       cuerpo = `<p style="color:var(--verde); font-weight:bold; margin:6px 0 0 0;">✅ Resultado confirmado</p>`
         + renderSetsDisplayHtml(r.sets, letra1, letra2)
         + `<p style="color:var(--gris); margin-top:6px;">Cargado por ${r.cargadoPor}. Confirmado por ${confirmadoPor}.</p>`;
+      if (soloJugador && !(sorteoExistente && sorteoExistente.cerrada)) {
+        cuerpo += `<button class="btn-secondary" onclick="editarResultadoConfirmado('${ruta}')">Editar resultado</button>`;
+      }
     } else if (r.estado === 'cargado') {
       cuerpo = renderSetsDisplayHtml(r.sets, letra1, letra2)
         + `<p style="color:var(--gris); margin-top:6px;">Cargado por ${r.cargadoPor}.</p>`;
@@ -2324,6 +2470,16 @@
 
   async function corregirResultadoCruce(ruta) {
     if (!confirm('¿Volver a editar este resultado? Los valores cargados van a quedar precargados para corregir.')) return;
+
+    const cruce = obtenerCruce(ruta);
+    cruce.resultado.estado = 'pendiente';
+    cruce.resultado.confirmadoPor = null;
+
+    if (await guardarSorteoCompleto()) renderListaResultados();
+  }
+
+  async function editarResultadoConfirmado(ruta) {
+    if (!confirm('¿Querés editar este resultado ya confirmado? Al guardar se va a confirmar nuevamente de forma automática.')) return;
 
     const cruce = obtenerCruce(ruta);
     cruce.resultado.estado = 'pendiente';
@@ -2643,6 +2799,9 @@
   window.compartirCruces = compartirCruces;
   window.cerrarJornada = cerrarJornada;
   window.compartirResultados = compartirResultados;
+  window.abrirHistorialFechas = abrirHistorialFechas;
+  window.abrirDetalleFecha = abrirDetalleFecha;
+  window.compartirResultadosFecha = compartirResultadosFecha;
   window.cuestionarSorteo = cuestionarSorteo;
   window.votarCuestionamiento = votarCuestionamiento;
   window.abrirElegirAdmin = abrirElegirAdmin;
@@ -2660,6 +2819,7 @@
   window.cargarResultadoCruce = cargarResultadoCruce;
   window.confirmarResultadoCruce = confirmarResultadoCruce;
   window.corregirResultadoCruce = corregirResultadoCruce;
+  window.editarResultadoConfirmado = editarResultadoConfirmado;
   window.mostrarArmadorProximaRonda = mostrarArmadorProximaRonda;
   window.tocarEquipoProximaRonda = tocarEquipoProximaRonda;
   window.deshacerCruceProximaRonda = deshacerCruceProximaRonda;
