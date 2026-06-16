@@ -137,7 +137,7 @@
 
   <!-- PANTALLA INICIO -->
   <div class="screen active" id="screen-inicio">
-    <button class="btn-primary" onclick="goTo('screen-crear')">Crear torneo</button>
+    <button class="btn-primary" onclick="verificarPerfilParaCrear()">Crear torneo</button>
     <button class="btn-secondary" onclick="abrirUnirse()">Unirse a torneo</button>
     <button class="btn-secondary" onclick="abrirMisTorneos()">Mis torneos</button>
     <button class="btn-secondary" onclick="alert('Próximamente: ver estadísticas')">Ver estadísticas</button>
@@ -369,6 +369,8 @@
     <h3>Resultados de hoy</h3>
     <p style="color:var(--gris); margin-top:-10px;">Formato: sets a <span id="formatoResultados"></span> games</p>
 
+    <div id="resumenResultados" style="display:none; flex-direction:column; gap:8px;"></div>
+
     <div id="listaResultados" style="display:flex; flex-direction:column; gap:14px;"></div>
 
     <div id="armadorProximaRonda" style="display:none; flex-direction:column; gap:8px;"></div>
@@ -507,6 +509,15 @@
       codigo += letras[Math.floor(Math.random() * letras.length)];
     }
     return codigo;
+  }
+
+  function verificarPerfilParaCrear() {
+    const miNombre = localStorage.getItem('miNombre');
+    if (!miNombre) {
+      alert('Para crear un torneo, primero tenés que crear tu perfil. Tocá "Mi Perfil" en el menú principal.');
+      return;
+    }
+    goTo('screen-crear');
   }
 
   async function crearTorneo() {
@@ -724,6 +735,19 @@
 
   async function renderConfirmados(codigo) {
     const fecha = fechaHoy();
+
+    // Siempre releer los inscriptos del torneo frescos de Firestore
+    const torneoSnap = await getDoc(doc(db, 'torneos', codigo));
+    const jugadoresDelTorneo = torneoSnap.exists() ? (torneoSnap.data().jugadores || []) : [];
+
+    // Verificar que cada jugador tenga perfil real en Firestore (filtra fantasmas del localStorage)
+    const jugadoresValidos = [];
+    for (const nombre of jugadoresDelTorneo) {
+      const pSnap = await getDoc(doc(db, 'jugadores', nombre));
+      if (pSnap.exists()) jugadoresValidos.push(nombre);
+    }
+    torneoJugadores = jugadoresValidos;
+
     const asistSnap = await getDoc(doc(db, 'torneos', codigo, 'asistencias', fecha));
     const confirmados = asistSnap.exists() ? asistSnap.data().confirmados : [];
 
@@ -1398,18 +1422,20 @@
       fechaHora: new Date().toISOString(),
       votosSi: [],
       votosNo: [],
-      estado: elegibles === 0 ? 'rechazado' : 'pendiente'
+      estado: elegibles === 0 ? 'aprobado' : 'pendiente'
     };
+    const invalidado = elegibles === 0;
 
     try {
-      await setDoc(doc(db, 'torneos', codigo, 'sorteos', fecha), { cuestionamiento }, { merge: true });
+      await setDoc(doc(db, 'torneos', codigo, 'sorteos', fecha), { cuestionamiento, invalidado }, { merge: true });
     } catch (e) {
       alert('No se pudo registrar el cuestionamiento: ' + e.message);
       return;
     }
 
     sorteoExistente.cuestionamiento = cuestionamiento;
-    renderCuestionamiento();
+    if (invalidado) sorteoExistente.invalidado = true;
+    recalcularValidezSorteo();
   }
 
   async function votarCuestionamiento(voto) {
@@ -1870,7 +1896,7 @@
       const r = c.resultado;
       if (!r) return false;
       if (r.estado === 'confirmado') return true;
-      if (r.estado === 'cargado' && r.fechaCarga && (Date.now() - new Date(r.fechaCarga).getTime() > DOCE_HS_MS)) return true;
+      if (r.estado === 'cargado' && r.fechaCarga && (Date.now() - new Date(r.fechaCarga).getTime() > plazoFirmeMs())) return true;
       return false;
     });
   }
@@ -1931,7 +1957,88 @@
     document.getElementById('formatoResultados').textContent = sorteoExistente.formatoSet;
     armadorProximaRondaActivo = false;
     renderListaResultados();
+    renderResumenResultados();
     goTo('screen-resultados');
+  }
+
+  function calcularEstadisticasDia() {
+    const equipos = calcularEquipos();
+    const stats = {}; // { letra: { nombre, setsGanados, gamesPropios, gamesRivales } }
+
+    equipos.forEach((pareja, idx) => {
+      const letra = letraEquipo(idx + 1);
+      stats[letra] = { nombre: nombrePareja(pareja), setsGanados: 0, gamesPropios: 0, gamesRivales: 0 };
+    });
+
+    const todosLosCruces = [
+      ...sorteoExistente.cruces,
+      ...((sorteoExistente.rondasExtra || []).flatMap(r => r.cruces))
+    ];
+
+    todosLosCruces.forEach(c => {
+      if (!c.pareja2 || !c.resultado) return;
+      const r = c.resultado;
+      if (r.estado !== 'confirmado') return;
+
+      const letra1 = letraEquipo(numeroEquipo(c.pareja1, equipos));
+      const letra2 = letraEquipo(numeroEquipo(c.pareja2, equipos));
+
+      (r.sets || []).forEach(s => {
+        if (!s) return;
+        stats[letra1].gamesPropios += s.g1;
+        stats[letra1].gamesRivales += s.g2;
+        stats[letra2].gamesPropios += s.g2;
+        stats[letra2].gamesRivales += s.g1;
+        if (s.g1 > s.g2) stats[letra1].setsGanados++;
+        else if (s.g2 > s.g1) stats[letra2].setsGanados++;
+      });
+    });
+
+    return stats;
+  }
+
+  function renderResumenResultados() {
+    const cont = document.getElementById('resumenResultados');
+    if (!jornadaFinalizada() && !hayResultadosCargados()) {
+      cont.style.display = 'none';
+      return;
+    }
+
+    const equipos = calcularEquipos();
+    const stats = calcularEstadisticasDia();
+    const letras = Object.keys(stats);
+
+    letras.sort((a, b) => {
+      const sa = stats[a], sb = stats[b];
+      if (sb.setsGanados !== sa.setsGanados) return sb.setsGanados - sa.setsGanados;
+      return (sb.gamesPropios - sb.gamesRivales) - (sa.gamesPropios - sa.gamesRivales);
+    });
+
+    const ganadora = letras[0];
+    const perdedora = letras[letras.length - 1];
+
+    let html = `<div style="border:2px solid var(--verde); border-radius:8px; padding:12px; background:var(--verde-claro);">
+      <p style="margin:0 0 4px 0; color:var(--verde); font-weight:bold;">🏆 Pareja ganadora del día:</p>
+      <p style="margin:0; font-weight:bold;">${ganadora}: ${stats[ganadora].nombre}</p>
+    </div>`;
+
+    html += `<div style="border:1px solid #ddd; border-radius:8px; padding:12px;">
+      <p style="margin:0 0 4px 0; color:var(--naranja); font-weight:bold;">🥴 Pareja perdedora del día (Los grandes derrotados):</p>
+      <p style="margin:0; font-weight:bold;">${perdedora}: ${stats[perdedora].nombre}</p>
+    </div>`;
+
+    letras.forEach(letra => {
+      const s = stats[letra];
+      html += `<div style="border:1px solid #ddd; border-radius:8px; padding:10px;">
+        <p style="margin:0 0 4px 0; font-weight:bold;">Pareja ${letra}: ${s.nombre}</p>
+        <p style="margin:0; color:var(--gris);">Sets ganados: ${s.setsGanados} | Games ganados: ${s.gamesPropios} | Games perdidos: ${s.gamesRivales}</p>
+      </div>`;
+    });
+
+    cont.style.display = 'flex';
+    cont.style.flexDirection = 'column';
+    cont.style.gap = '8px';
+    cont.innerHTML = html;
   }
 
   function nombrePareja(pareja) {
@@ -2056,12 +2163,13 @@
 
     const r = c.resultado || { estado: 'pendiente', sets: [null, null, null, null] };
     const firme12h = r.estado === 'cargado' && r.fechaCarga
-      && (Date.now() - new Date(r.fechaCarga).getTime() > DOCE_HS_MS);
+      && (Date.now() - new Date(r.fechaCarga).getTime() > plazoFirmeMs());
 
     let cuerpo = '';
 
     if (r.estado === 'confirmado' || firme12h) {
-      const confirmadoPor = r.estado === 'confirmado' ? r.confirmadoPor : 'firme automáticamente (12hs)';
+      const soloJugador = confirmadosData.filter(j => !j.esRandom).length <= 1;
+      const confirmadoPor = r.estado === 'confirmado' ? r.confirmadoPor : `firme automáticamente (${soloJugador ? '1hs' : '12hs'})`;
       cuerpo = `<p style="color:var(--verde); font-weight:bold; margin:6px 0 0 0;">✅ Resultado confirmado</p>`
         + renderSetsDisplayHtml(r.sets, letra1, letra2)
         + `<p style="color:var(--gris); margin-top:6px;">Cargado por ${r.cargadoPor}. Confirmado por ${confirmadoPor}.</p>`;
@@ -2069,7 +2177,7 @@
       cuerpo = renderSetsDisplayHtml(r.sets, letra1, letra2)
         + `<p style="color:var(--gris); margin-top:6px;">Cargado por ${r.cargadoPor}.</p>`;
       if (miNombre === r.cargadoPor) {
-        cuerpo += `<p style="color:var(--gris);">Esperando que otro jugador lo confirme (o queda firme en 12hs).</p>
+        cuerpo += `<p style="color:var(--gris);">Esperando que otro jugador lo confirme (o queda firme en ${confirmadosData.filter(j=>!j.esRandom).length<=1?'1hs':'12hs'}).</p>
           <button class="btn-secondary" onclick="corregirResultadoCruce('${ruta}')">Corregir</button>`;
       } else {
         cuerpo += `<div style="display:flex; gap:10px;">
@@ -2177,15 +2285,23 @@
 
     const miNombre = localStorage.getItem('miNombre');
     const cruce = obtenerCruce(ruta);
+    const soloJugador = confirmadosData.filter(j => !j.esRandom).length <= 1;
+
     cruce.resultado = {
       sets: sets,
       cargadoPor: miNombre,
       fechaCarga: new Date().toISOString(),
-      confirmadoPor: null,
-      estado: 'cargado'
+      confirmadoPor: soloJugador ? miNombre : null,
+      estado: soloJugador ? 'confirmado' : 'cargado'
     };
 
     if (await guardarSorteoCompleto()) renderListaResultados();
+  }
+
+  function plazoFirmeMs() {
+    // Si el único jugador real es el que cargó, el plazo es 1 hora; si no, 12 horas.
+    const soloJugador = confirmadosData.filter(j => !j.esRandom).length <= 1;
+    return soloJugador ? 60 * 60 * 1000 : DOCE_HS_MS;
   }
 
   async function confirmarResultadoCruce(ruta) {
@@ -2497,6 +2613,7 @@
   window.cambiarValor = cambiarValor;
   window.toggleChip = toggleChip;
   window.crearTorneo = crearTorneo;
+  window.verificarPerfilParaCrear = verificarPerfilParaCrear;
   window.compartirTorneo = compartirTorneo;
   window.abrirMisTorneos = abrirMisTorneos;
   window.abrirVerTorneo = abrirVerTorneo;
