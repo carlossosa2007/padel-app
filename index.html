@@ -140,7 +140,7 @@
     <button class="btn-primary" onclick="verificarPerfilParaCrear()">Crear torneo</button>
     <button class="btn-secondary" onclick="abrirUnirse()">Unirme a torneo</button>
     <button class="btn-secondary" onclick="abrirMisTorneos()">Mis torneos</button>
-    <button class="btn-secondary" onclick="alert('Próximamente: ver estadísticas')">Ver estadísticas</button>
+    <button class="btn-secondary" onclick="abrirMisEstadisticas()">Mis estadísticas</button>
     <button class="btn-secondary" onclick="abrirPerfil()">Mi Perfil</button>
   </div>
 
@@ -455,6 +455,15 @@
 
     <button class="btn-primary" id="btnGuardarPerfil" onclick="guardarPerfil()">Guardar</button>
     <button class="btn-secondary" id="btnEditarPerfil" onclick="habilitarEdicion()" style="display:none;">Editar</button>
+  </div>
+
+  <!-- PANTALLA MIS ESTADÍSTICAS -->
+  <div class="screen" id="screen-mis-estadisticas">
+    <button class="btn-volver" onclick="goTo('screen-inicio')">&larr; Volver</button>
+    <h3>Mis estadísticas</h3>
+    <p id="statsNombreJugador" style="color:var(--gris); margin-top:-8px;"></p>
+
+    <div id="statsContenido" style="display:flex; flex-direction:column; gap:14px;"></div>
   </div>
 
 </div>
@@ -2655,6 +2664,202 @@
   window.tocarEquipoProximaRonda = tocarEquipoProximaRonda;
   window.deshacerCruceProximaRonda = deshacerCruceProximaRonda;
   window.confirmarProximaRonda = confirmarProximaRonda;
+  window.abrirMisEstadisticas = abrirMisEstadisticas;
+
+  // ---- MIS ESTADÍSTICAS (global, todos los torneos) ----
+
+  async function abrirMisEstadisticas() {
+    const miNombre = localStorage.getItem('miNombre');
+    if (!miNombre) {
+      alert('Por favor, cargá tu perfil de jugador para habilitar estas funciones. Tocá "Mi Perfil" en el menú principal.');
+      return;
+    }
+
+    document.getElementById('statsNombreJugador').textContent = miNombre;
+    document.getElementById('statsContenido').innerHTML = '<p style="color:var(--gris);">Cargando estadísticas...</p>';
+    goTo('screen-mis-estadisticas');
+
+    // 1. Buscar todos los torneos en los que participo
+    const torneosQuery = query(collection(db, 'torneos'), where('jugadores', 'array-contains', miNombre));
+    const torneosSnap = await getDocs(torneosQuery);
+    const torneos = torneosSnap.docs.map(d => d.data());
+
+    // 2. Para cada torneo, leer todos los sorteos (todas las jornadas)
+    let setsGanados = 0, setsTotales = 0;
+    let gamesGanados = 0, gamesTotales = 0;
+    const ultimos10Sets = []; // { ganado: bool, fecha: string }
+    const rankingTorneos = []; // { nombre, codigo, posicion, total }
+
+    for (const torneo of torneos) {
+      const sorteosSnap = await getDocs(collection(db, 'torneos', torneo.codigo, 'sorteos'));
+      const rankingJornadas = {}; // { letra: { sets, games } } acumulado por equipo
+
+      let sumaSetsMios = 0, sumaSetsTotalesMios = 0;
+      let sumaGamesMios = 0, sumaGamesTotalesMios = 0;
+      const setsEstesTorneo = [];
+
+      for (const sorteoDoc of sorteosSnap.docs) {
+        const sorteo = sorteoDoc.data();
+        const fecha = sorteoDoc.id;
+
+        const todosLosCruces = [
+          ...(sorteo.cruces || []),
+          ...((sorteo.rondasExtra || []).flatMap(r => r.cruces))
+        ];
+
+        // Calcular equipos de esta jornada para saber la letra de "miNombre"
+        const equiposJornada = [];
+        (sorteo.cruces || []).forEach(c => {
+          equiposJornada.push(c.pareja1);
+          if (c.pareja2) equiposJornada.push(c.pareja2);
+        });
+        const libres = sorteo.parejasLibres || [];
+        for (let i = 0; i < libres.length; i += 2) {
+          if (libres[i + 1]) equiposJornada.push([libres[i], libres[i + 1]]);
+        }
+
+        // Inicializar ranking por equipo (para calcular posición relativa al torneo)
+        equiposJornada.forEach((pareja, idx) => {
+          const letra = letraEquipo(idx + 1);
+          if (!rankingJornadas[letra]) rankingJornadas[letra] = { nombre: nombrePareja(pareja), sets: 0, gamesDif: 0 };
+        });
+
+        for (const cruce of todosLosCruces) {
+          if (!cruce.pareja2 || !cruce.resultado) continue;
+          const r = cruce.resultado;
+          if (r.estado !== 'confirmado') continue;
+
+          const p1 = cruce.pareja1;
+          const p2 = cruce.pareja2;
+          const soySocioP1 = p1.some(j => j.nombre === miNombre);
+          const soySocioP2 = p2.some(j => j.nombre === miNombre);
+          if (!soySocioP1 && !soySocioP2) continue;
+
+          const idxP1 = equiposJornada.findIndex(p => p && p[0] && p[0].nombre === p1[0].nombre && p[1] && p[1].nombre === p1[1].nombre);
+          const idxP2 = equiposJornada.findIndex(p => p && p[0] && p[0].nombre === p2[0].nombre && p[1] && p[1].nombre === p2[1].nombre);
+          const letraP1 = letraEquipo(idxP1 + 1);
+          const letraP2 = letraEquipo(idxP2 + 1);
+
+          (r.sets || []).forEach(s => {
+            if (!s) return;
+            const gMios = soySocioP1 ? s.g1 : s.g2;
+            const gRival = soySocioP1 ? s.g2 : s.g1;
+            const ganado = gMios > gRival;
+
+            setsGanados += ganado ? 1 : 0;
+            setsTotales++;
+            gamesGanados += gMios;
+            gamesTotales += gMios + gRival;
+
+            setsEstesTorneo.push({ ganado, fecha });
+
+            if (rankingJornadas[letraP1]) {
+              rankingJornadas[letraP1].sets += s.g1 > s.g2 ? 1 : 0;
+              rankingJornadas[letraP1].gamesDif += (s.g1 - s.g2);
+            }
+            if (rankingJornadas[letraP2]) {
+              rankingJornadas[letraP2].sets += s.g2 > s.g1 ? 1 : 0;
+              rankingJornadas[letraP2].gamesDif += (s.g2 - s.g1);
+            }
+          });
+        }
+
+        ultimos10Sets.push(...setsEstesTorneo.map(s => ({ ...s })));
+      }
+
+      // Calcular posición de miNombre en el ranking de este torneo
+      const equiposConYo = Object.entries(rankingJornadas).find(([_, v]) =>
+        v.nombre && v.nombre.includes(miNombre)
+      );
+      if (equiposConYo && Object.keys(rankingJornadas).length > 0) {
+        const ordenados = Object.entries(rankingJornadas).sort(([, a], [, b]) =>
+          b.sets !== a.sets ? b.sets - a.sets : b.gamesDif - a.gamesDif
+        );
+        const posicion = ordenados.findIndex(([_, v]) => v.nombre && v.nombre.includes(miNombre)) + 1;
+        rankingTorneos.push({ nombre: torneo.nombre, codigo: torneo.codigo, posicion, total: ordenados.length });
+      }
+    }
+
+    // Últimos 10 sets (por fecha descendente)
+    ultimos10Sets.sort((a, b) => b.fecha > a.fecha ? 1 : -1);
+    const ultimos10 = ultimos10Sets.slice(0, 10);
+    const ult10Ganados = ultimos10.filter(s => s.ganado).length;
+    const ult10Perdidos = ultimos10.length - ult10Ganados;
+
+    // Torneos donde soy primero o último
+    const torneosPrimero = rankingTorneos.filter(t => t.posicion === 1);
+    const torneosUltimo = rankingTorneos.filter(t => t.posicion === t.total && t.total > 1);
+
+    // ---- Render ----
+    const pctSets = setsTotales > 0 ? Math.round(setsGanados / setsTotales * 100) : 0;
+    const pctGames = gamesTotales > 0 ? Math.round(gamesGanados / gamesTotales * 100) : 0;
+
+    const graficaTorta = (ganados, perdidos) => {
+      const total = ganados + perdidos;
+      if (total === 0) return '<p style="color:var(--gris);">Sin datos todavía</p>';
+      const pct = Math.round(ganados / total * 100);
+      const angulo = (ganados / total) * 360;
+      const rad = (angulo - 90) * Math.PI / 180;
+      const x = 50 + 40 * Math.cos(rad);
+      const y = 50 + 40 * Math.sin(rad);
+      const largeArc = angulo > 180 ? 1 : 0;
+      const slice = ganados === total
+        ? `<circle cx="50" cy="50" r="40" fill="var(--verde)"/>`
+        : perdidos === total
+          ? `<circle cx="50" cy="50" r="40" fill="#eee"/>`
+          : `<path d="M50,50 L50,10 A40,40 0 ${largeArc},1 ${x},${y} Z" fill="var(--verde)"/>
+             <path d="M50,50 L${x},${y} A40,40 0 ${1 - largeArc},1 50,10 Z" fill="#eee"/>`;
+      return `<div style="display:flex; align-items:center; gap:16px;">
+        <svg width="90" height="90" viewBox="0 0 100 100">
+          ${slice}
+          <text x="50" y="55" text-anchor="middle" font-size="18" font-weight="bold" fill="${ganados===total?'white':'var(--verde)'}">${pct}%</text>
+        </svg>
+        <div>
+          <p style="margin:0; color:var(--verde);">✅ Ganados: ${ganados}</p>
+          <p style="margin:0; color:var(--naranja);">❌ Perdidos: ${perdidos}</p>
+        </div>
+      </div>`;
+    };
+
+    let html = '';
+
+    html += `<div style="border:1px solid #ddd; border-radius:8px; padding:12px;">
+      <p style="margin:0 0 4px 0; font-weight:bold;">Sets ganados</p>
+      <p style="margin:0; font-size:24px; font-weight:bold; color:var(--verde);">${setsGanados} <span style="font-size:14px; color:var(--gris);">/ ${setsTotales} jugados (${pctSets}%)</span></p>
+    </div>`;
+
+    html += `<div style="border:1px solid #ddd; border-radius:8px; padding:12px;">
+      <p style="margin:0 0 8px 0; font-weight:bold;">Últimos ${ultimos10.length} sets jugados</p>
+      ${graficaTorta(ult10Ganados, ult10Perdidos)}
+    </div>`;
+
+    html += `<div style="border:1px solid #ddd; border-radius:8px; padding:12px;">
+      <p style="margin:0 0 4px 0; font-weight:bold;">Games ganados</p>
+      <p style="margin:0; font-size:24px; font-weight:bold; color:var(--verde);">${gamesGanados} <span style="font-size:14px; color:var(--gris);">/ ${gamesTotales} jugados (${pctGames}%)</span></p>
+    </div>`;
+
+    const txtPrimero = torneosPrimero.length > 0
+      ? torneosPrimero.map(t => t.nombre).join(', ')
+      : 'Ninguno todavía 😅';
+    html += `<div style="border:1px solid #ddd; border-radius:8px; padding:12px;">
+      <p style="margin:0 0 4px 0; font-weight:bold;">🥇 Torneos en los que voy primero</p>
+      <p style="margin:0; color:var(--verde);">${txtPrimero}</p>
+    </div>`;
+
+    const txtMuela = torneosUltimo.length > 0
+      ? torneosUltimo.map(t => t.nombre).join(', ')
+      : 'Ninguno 🎉';
+    html += `<div style="border:1px solid #ddd; border-radius:8px; padding:12px;">
+      <p style="margin:0 0 4px 0; font-weight:bold;">🦷 Torneos en los que soy la muela</p>
+      <p style="margin:0; color:var(--naranja);">${txtMuela}</p>
+    </div>`;
+
+    if (setsTotales === 0) {
+      html = '<p style="color:var(--gris);">Todavía no hay resultados confirmados en tus torneos. ¡A jugar!</p>';
+    }
+
+    document.getElementById('statsContenido').innerHTML = html;
+  }
 
   // Poblar los selects de hora (24hs, sin AM/PM) al cargar la app
   poblarSelectHora('horaTorneoH', 'horaTorneoM');
