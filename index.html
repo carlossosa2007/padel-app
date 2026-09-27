@@ -555,6 +555,17 @@
       return;
     }
 
+    // Verificar que no exista ya un torneo con el mismo nombre
+    const torneosSnap = await getDocs(collection(db, 'torneos'));
+    const nombreDuplicado = torneosSnap.docs.some(d => {
+      const data = d.data();
+      return data.nombre && data.nombre.trim().toLowerCase() === nombre.toLowerCase();
+    });
+    if (nombreDuplicado) {
+      alert('Ya existe un torneo con ese nombre. Por favor, elegí un nombre diferente.');
+      return;
+    }
+
     const diasSeleccionados = [...document.querySelectorAll('#diasJuego .chip.selected')]
       .map(c => c.textContent);
 
@@ -3027,4 +3038,3 @@
 </script>
 </body>
 </html>
-
